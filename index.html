@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Panel Puzzle</title>
+
+    <style>
+      body {
+        margin: 0;
+        background: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+
+      #game {
+        position: relative;
+      }
+
+      #board {
+        display: grid;
+        grid-template-columns: repeat(6, 40px);
+        grid-template-rows: repeat(12, 40px);
+        gap: 2px;
+        background: #333;
+        padding: 6px;
+        position: relative;
+      }
+
+      .container {
+        display: flex;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      #scoreboard {
+        width: 140px;
+        color: #fff;
+        font-family: sans-serif;
+        text-align: center;
+      }
+
+      #score-value {
+        margin-top: 8px;
+        font-size: 28px;
+      }
+
+      #start {
+        position: absolute;
+        top: 6px;
+        right: -180px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: none;
+        background: #2b7cff;
+        color: #fff;
+        cursor: pointer;
+        z-index: 50;
+      }
+
+      #combo {
+        position: absolute;
+        top: -44px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #fff;
+        background: rgba(255, 255, 255, 0.06);
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-weight: bold;
+        min-width: 120px;
+        text-align: center;
+        display: none;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      }
+
+      .cell {
+        width: 40px;
+        height: 40px;
+        background: #222;
+      }
+      .R {
+        background: crimson;
+      }
+      .G {
+        background: seagreen;
+      }
+      .B {
+        background: royalblue;
+      }
+      .Y {
+        background: goldenrod;
+      }
+
+      .cursor {
+        outline: 3px solid white;
+        box-sizing: border-box;
+      }
+
+      .flash-white {
+        background: #fff !important;
+      }
+
+      .floating {
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        pointer-events: none;
+        box-sizing: border-box;
+      }
+
+      #gameover {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        font-size: 32px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div id="scoreboard">
+        <h3>Score</h3>
+        <div id="score-value">0</div>
+        <div
+          id="highscore"
+          style="margin-top: 8px; font-size: 12px; opacity: 0.8"
+        >
+          High: <span id="highscore-value">0</span>
+        </div>
+        <div id="level" style="margin-top: 8px; font-size: 12px; opacity: 0.9">
+          Level: <span id="level-value">0</span>
+        </div>
+      </div>
+
+      <div id="game">
+        <button id="start">Start</button>
+        <div id="board"></div>
+        <div id="combo" style="display: none"></div>
+        <div id="gameover">GAME OVER</div>
+      </div>
+    </div>
+
+    <script>
+      /* =====================
+   설정
+===================== */
+      const W = 6;
+      const H = 12;
+      const COLORS = ["R", "G", "B", "Y"];
+      const BASE_RISE_INTERVAL = 3500;
+      let riseInterval = BASE_RISE_INTERVAL;
+      const CELL_SIZE = 40;
+      const GAP_SIZE = 2;
+      const PADDING = 6;
+      console.log("swipe-pong script loaded");
+      // load highscore from localStorage
+      try {
+        const hs = localStorage.getItem("swipe-pong-highscore");
+        if (hs !== null) highscore = Math.max(0, parseInt(hs, 10) || 0);
+      } catch (e) {
+        console.warn("localStorage not available", e);
+      }
+
+      let board = Array.from({ length: H }, () => Array(W).fill(null));
+      let cursor = { x: 2, y: 8 };
+      let gameOver = false;
+
+      // 전역 상태 변수들을 스크립트 초기에 선언하여 TDZ(temporal dead zone) 문제 방지
+      let animatingSwap = { active: false };
+      let removing = [];
+      let removalTimer = null;
+      let gravityTimer = null;
+      let riseTimer = null;
+      let suspendGame = false;
+      let gravityWasActive = false;
+      let score = 0;
+      let combo = 0;
+      let comboTimeout = null;
+      let highscore = 0;
+      let level = 0;
+      let gameStarted = false;
+
+      /* 초기 줄: 바닥에서부터 몇 줄 채워서 바로 보이게 함 */
+      for (let y = H - 1; y >= Math.max(0, H - 4); y--)
+        board[y] = generateSafeRow(y);
+
+      /* =====================
+   렌더
+===================== */
+      const boardEl = document.getElementById("board");
+      const gameOverEl = document.getElementById("gameover");
+
+      function render() {
+        try {
+          boardEl.innerHTML = "";
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              const d = document.createElement("div");
+              d.className = "cell";
+
+              const cellColor = board[y][x];
+              const rem = removing.find((r) => r.x === x && r.y === y) || null;
+
+              if (rem) {
+                // 홀수 프레임일 때 흰색으로 보이게 함
+                if (rem.frame % 2 === 1) d.classList.add("flash-white");
+                else if (cellColor) d.classList.add(cellColor);
+              } else {
+                if (cellColor) d.classList.add(cellColor);
+              }
+
+              if (
+                (x === cursor.x && y === cursor.y) ||
+                (x === cursor.x + 1 && y === cursor.y)
+              )
+                d.classList.add("cursor");
+
+              boardEl.appendChild(d);
+            }
+          }
+        } catch (err) {
+          console.error("render error", err);
+          gameOverEl.style.display = "flex";
+          gameOverEl.textContent =
+            "ERROR: " + (err && err.message ? err.message : String(err));
+          return;
+        }
+        // overlays for animations (swap floating panels)
+        if (animatingSwap && animatingSwap.active) {
+          const a = document.createElement("div");
+          a.className = `floating ${animatingSwap.aColor || ""}`;
+          const aLeft =
+            (animatingSwap.curA && animatingSwap.curA.left) ||
+            animatingSwap.leftA ||
+            0;
+          const aTop =
+            (animatingSwap.curA && animatingSwap.curA.top) ||
+            animatingSwap.topA ||
+            0;
+          a.style.left = aLeft + "px";
+          a.style.top = aTop + "px";
+          a.style.zIndex = 10;
+          boardEl.appendChild(a);
+
+          const b = document.createElement("div");
+          b.className = `floating ${animatingSwap.bColor || ""}`;
+          const bLeft =
+            (animatingSwap.curB && animatingSwap.curB.left) ||
+            animatingSwap.leftB ||
+            0;
+          const bTop =
+            (animatingSwap.curB && animatingSwap.curB.top) ||
+            animatingSwap.topB ||
+            0;
+          b.style.left = bLeft + "px";
+          b.style.top = bTop + "px";
+          b.style.zIndex = 11;
+          boardEl.appendChild(b);
+        }
+
+        gameOverEl.style.display = gameOver ? "flex" : "none";
+
+        // Start / Restart button visibility
+        const startBtnEl = document.getElementById("start");
+        if (startBtnEl) {
+          if (gameOver) {
+            startBtnEl.style.display = "inline-block";
+            startBtnEl.textContent = "Restart";
+          } else if (!gameStarted) {
+            startBtnEl.style.display = "inline-block";
+            startBtnEl.textContent = "Start";
+          } else {
+            startBtnEl.style.display = "none";
+            startBtnEl.textContent = "Start";
+          }
+        }
+
+        // update score UI (do not reset on game over)
+        const scoreEl = document.getElementById("score-value");
+        if (scoreEl) scoreEl.textContent = String(score);
+        const hsEl = document.getElementById("highscore-value");
+        if (hsEl) hsEl.textContent = String(highscore);
+
+        // level display
+        const levelEl = document.getElementById("level-value");
+        if (levelEl) levelEl.textContent = String(level);
+
+        // update combo overlay visibility
+        const comboEl = document.getElementById("combo");
+        if (comboEl) {
+          if (combo > 1) {
+            comboEl.style.display = "block";
+            comboEl.textContent = combo + " COMBO";
+          } else {
+            comboEl.style.display = "none";
+          }
+        }
+      }
+
+      /* =====================
+   입력
+===================== */
+      document.addEventListener("keydown", (e) => {
+        if (!gameStarted || gameOver || suspendGame) return;
+
+        switch (e.key) {
+          case "ArrowLeft":
+            cursor.x = Math.max(0, cursor.x - 1);
+            break;
+          case "ArrowRight":
+            cursor.x = Math.min(W - 2, cursor.x + 1);
+            break;
+          case "ArrowUp":
+            cursor.y = Math.max(0, cursor.y - 1);
+            break;
+          case "ArrowDown":
+            cursor.y = Math.min(H - 1, cursor.y + 1);
+            break;
+          case " ":
+            e.preventDefault();
+            if (swap(cursor.x, cursor.y)) {
+              // player initiated action -> reset combo
+              combo = 0;
+            }
+            break;
+        }
+        render();
+      });
+
+      // Reset shortcut removed per user preference
+
+      // Start button
+      const startBtn = document.getElementById("start");
+      console.log("startBtn:", !!startBtn, startBtn);
+      function startGame() {
+        console.log("startGame called", gameStarted);
+        if (gameStarted) return;
+        gameStarted = true;
+        // hide start button
+        if (startBtn) startBtn.style.display = "none";
+        gameOver = false;
+        // ensure timers reset
+        if (riseTimer) clearInterval(riseTimer);
+        startRise();
+        render();
+      }
+      if (startBtn) {
+        // ensure clickable
+        startBtn.style.pointerEvents = "auto";
+        startBtn.addEventListener("click", (e) => {
+          console.log("start clicked event", e.type);
+          if (gameOver) {
+            resetGame();
+            startGame();
+          } else {
+            startGame();
+          }
+        });
+      }
+
+      /* =====================
+   상승
+===================== */
+      function startRise() {
+        if (riseTimer) clearInterval(riseTimer);
+        riseTimer = setInterval(() => {
+          console.log("rise tick");
+          if (gameOver || suspendGame) return;
+
+          if (board[0].some((v) => v !== null)) {
+            gameOver = true;
+            render();
+            return;
+          }
+
+          for (let y = 0; y < H - 1; y++) board[y] = board[y + 1];
+          board[H - 1] = generateSafeRow(H - 1);
+
+          // 보드가 위로 올라갈 때 선택 커서도 한 칸 올라가도록 동기화
+          cursor.y = Math.max(0, cursor.y - 1);
+
+          resolve();
+          render();
+        }, riseInterval);
+      }
+
+      // do NOT auto-start rise; wait for player to press Start
+
+      /* =====================
+   로직
+===================== */
+      function swap(x, y) {
+        // animate swap instead of instant swap
+        if (animatingSwap && animatingSwap.active) return false;
+        if (removalTimer || gravityTimer) return false;
+        animateSwap(x, y);
+        return true;
+      }
+
+      // 애니메이션 상태 (초기 선언은 위에서 이미 처리됨)
+
+      function getCellPos(x, y) {
+        const colW = CELL_SIZE + GAP_SIZE;
+        const left = PADDING + x * colW;
+        const top = PADDING + y * colW;
+        return { left, top };
+      }
+
+      function animateSwap(x, y) {
+        console.log("animateSwap start", x, y);
+        const aColor = board[y][x];
+        const bColor = board[y][x + 1];
+
+        // reserve cells (hide originals while animating)
+        board[y][x] = null;
+        board[y][x + 1] = null;
+
+        // pause gravity if it's running so pieces won't fall during swap
+        gravityWasActive = !!gravityTimer;
+        if (gravityWasActive) {
+          clearInterval(gravityTimer);
+          gravityTimer = null;
+        }
+
+        const start = performance.now();
+        const duration = 200; // ms (faster)
+        const posA = getCellPos(x, y);
+        const posB = getCellPos(x + 1, y);
+        const center = {
+          x: (posA.left + posB.left) / 2 + CELL_SIZE / 2,
+          y: posA.top + CELL_SIZE / 2,
+        };
+        const dist = posB.left + CELL_SIZE / 2 - (posA.left + CELL_SIZE / 2);
+        const radius = dist / 2;
+
+        animatingSwap = {
+          active: true,
+          aColor,
+          bColor,
+          x,
+          y,
+          x2: x + 1,
+          y2: y,
+          leftA: posA.left,
+          topA: posA.top,
+          leftB: posB.left,
+          topB: posB.top,
+          center,
+          radius,
+          start,
+          duration,
+        };
+        suspendGame = true;
+
+        function frame(now) {
+          const t = Math.min(
+            1,
+            (now - animatingSwap.start) / animatingSwap.duration
+          );
+
+          // 각도: left starts at pi, right at 0; move clockwise by pi radians
+          const angleA = Math.PI - t * Math.PI;
+          const angleB = 0 - t * Math.PI;
+
+          const ax =
+            animatingSwap.center.x +
+            animatingSwap.radius * Math.cos(angleA) -
+            CELL_SIZE / 2;
+          const ay =
+            animatingSwap.center.y +
+            animatingSwap.radius * Math.sin(angleA) -
+            CELL_SIZE / 2;
+          const bx =
+            animatingSwap.center.x +
+            animatingSwap.radius * Math.cos(angleB) -
+            CELL_SIZE / 2;
+          const by =
+            animatingSwap.center.y +
+            animatingSwap.radius * Math.sin(angleB) -
+            CELL_SIZE / 2;
+
+          animatingSwap.curA = { left: ax, top: ay };
+          animatingSwap.curB = { left: bx, top: by };
+          render();
+
+          if (t < 1) requestAnimationFrame(frame);
+          else {
+            // finalize swap
+            board[y][x] = animatingSwap.bColor;
+            board[y][x + 1] = animatingSwap.aColor;
+            animatingSwap = { active: false };
+            render();
+            // resume game systems and resolve
+            suspendGame = false;
+            // if gravity was active before, resume it
+            if (gravityWasActive) {
+              gravityWasActive = false;
+              // start gravity loop again
+              setTimeout(() => gravityUntilStable(), 0);
+            }
+            setTimeout(() => resolve(), 0);
+          }
+        }
+
+        requestAnimationFrame(frame);
+      }
+
+      function resetGame() {
+        // clear timers
+        if (riseTimer) {
+          clearInterval(riseTimer);
+          riseTimer = null;
+        }
+        if (gravityTimer) {
+          clearInterval(gravityTimer);
+          gravityTimer = null;
+        }
+        if (removalTimer) {
+          clearInterval(removalTimer);
+          removalTimer = null;
+        }
+
+        // stop animations
+        animatingSwap = { active: false };
+        removing = [];
+        suspendGame = false;
+        gravityWasActive = false;
+
+        // reset board and state
+        board = Array.from({ length: H }, () => Array(W).fill(null));
+        board[11] = generateSafeRow(11);
+        board[10] = generateSafeRow(10);
+        cursor = { x: 2, y: 8 };
+        gameOver = false;
+
+        // reset UI
+        score = 0;
+        level = 0;
+        const scoreEl = document.getElementById("score-value");
+        if (scoreEl) scoreEl.textContent = "0";
+
+        // reset rise interval
+        riseInterval = BASE_RISE_INTERVAL;
+
+        render();
+
+        // go back to pre-start state (do not auto start)
+        gameStarted = false;
+        if (startBtn) startBtn.style.display = "inline-block";
+      }
+
+      // timers & removal state are declared earlier to avoid TDZ
+      const REMOVAL_INTERVAL = 90; // ms per frame (faster blink)
+      const REMOVAL_FRAMES = 4; // 0..3, 마지막 프레임 뒤에 제거
+
+      function resolve() {
+        const matches = findMatches();
+        if (!matches.length) {
+          if (hasFloating()) gravityUntilStable();
+          return;
+        }
+
+        startRemoval(matches);
+      }
+
+      // 한 칸씩 떨어뜨리는 중력 한 스텝
+      function applyGravityStep() {
+        let moved = false;
+        for (let x = 0; x < W; x++) {
+          for (let y = H - 2; y >= 0; y--) {
+            if (board[y][x] && !board[y + 1][x]) {
+              board[y + 1][x] = board[y][x];
+              board[y][x] = null;
+              moved = true;
+            }
+          }
+        }
+        return moved;
+      }
+
+      // 중력이 멈출 때까지 애니메이션처럼 한 칸씩 내리고, 멈추면 다시 매치 검사
+      function gravityUntilStable() {
+        if (gravityTimer) return;
+        console.log("gravity start");
+        gravityTimer = setInterval(() => {
+          const moved = applyGravityStep();
+          if (moved) {
+            render();
+          } else {
+            clearInterval(gravityTimer);
+            gravityTimer = null;
+            // 안정화되면 새 매치를 체크하여 연쇄 처리
+            setTimeout(() => resolve(), 0);
+          }
+        }, 80);
+      }
+
+      function updateLevelAndRise() {
+        const newLevel = Math.floor(score / 1000);
+        if (newLevel !== level) {
+          level = newLevel;
+          // simple linear speed up: decrease interval by 300ms per level, min 600ms
+          riseInterval = Math.max(600, BASE_RISE_INTERVAL - level * 300);
+          // restart rise timer with new interval
+          if (riseTimer) {
+            startRise();
+          }
+        }
+      }
+
+      function hasFloating() {
+        for (let x = 0; x < W; x++) {
+          for (let y = 0; y < H - 1; y++) {
+            if (board[y][x] && !board[y + 1][x]) return true;
+          }
+        }
+        return false;
+      }
+
+      // 중복 좌표 제거 후 제거 리스트에 추가하고 애니메이션 시작
+      function startRemoval(coords) {
+        const key = (x, y) => `${x},${y}`;
+        const seen = new Set();
+        coords.forEach(([x, y]) => seen.add(key(x, y)));
+
+        const removedCount = seen.size;
+
+        // combo: increment for each removal wave
+        combo++;
+
+        // calculate score: per piece base 10, plus 10*combo per piece
+        const perPiece = 10 + 10 * combo;
+        const points = removedCount * perPiece;
+        score += points;
+
+        // update highscore if needed and persist
+        if (score > highscore) {
+          highscore = score;
+          try {
+            localStorage.setItem("swipe-pong-highscore", String(highscore));
+          } catch (e) {
+            /* ignore storage errors */
+          }
+        }
+
+        // update level based on score thresholds (every 1000 points)
+        updateLevelAndRise();
+
+        // show combo overlay briefly
+        const comboEl = document.getElementById("combo");
+        if (comboEl && combo > 1) {
+          comboEl.style.display = "block";
+          comboEl.textContent = combo + " COMBO";
+          if (comboTimeout) clearTimeout(comboTimeout);
+          comboTimeout = setTimeout(() => {
+            if (comboEl) comboEl.style.display = "none";
+            comboTimeout = null;
+          }, 1200);
+        }
+
+        // push unique coords with frame counter
+        for (const s of seen) {
+          const [x, y] = s.split(",").map(Number);
+          removing.push({ x, y, frame: 0 });
+        }
+
+        if (removalTimer) return;
+        removalTimer = setInterval(() => {
+          // advance frames
+          for (let i = removing.length - 1; i >= 0; i--) {
+            removing[i].frame++;
+            if (removing[i].frame >= REMOVAL_FRAMES) {
+              const { x, y } = removing[i];
+              board[y][x] = null;
+              removing.splice(i, 1);
+            }
+          }
+          render();
+
+          if (removing.length === 0) {
+            clearInterval(removalTimer);
+            removalTimer = null;
+            // 제거 완료 후 중력 적용
+            if (hasFloating()) gravityUntilStable();
+            else setTimeout(() => resolve(), 0);
+          }
+        }, REMOVAL_INTERVAL);
+      }
+
+      function findMatches() {
+        const out = [];
+
+        // 가로
+        for (let y = 0; y < H; y++) {
+          let c = 1;
+          for (let x = 1; x <= W; x++) {
+            const cur = board[y][x];
+            const prev = board[y][x - 1];
+            if (cur && cur === prev) c++;
+            else {
+              if (c >= 3 && prev)
+                for (let i = 0; i < c; i++) out.push([x - 1 - i, y]);
+              c = 1;
+            }
+          }
+        }
+
+        // 세로
+        for (let x = 0; x < W; x++) {
+          let c = 1;
+          for (let y = 1; y <= H; y++) {
+            const cur = board[y]?.[x];
+            const prev = board[y - 1][x];
+            if (cur && cur === prev) c++;
+            else {
+              if (c >= 3 && prev)
+                for (let i = 0; i < c; i++) out.push([x, y - 1 - i]);
+              c = 1;
+            }
+          }
+        }
+        return out;
+      }
+
+      /* =====================
+   안전한 줄 생성
+===================== */
+      function generateSafeRow(y) {
+        const row = [];
+
+        for (let x = 0; x < W; x++) {
+          let choices = COLORS.slice();
+
+          // 가로 3 방지
+          if (x >= 2 && row[x - 1] === row[x - 2]) {
+            choices = choices.filter((c) => c !== row[x - 1]);
+          }
+
+          // 세로 3 방지
+          if (
+            y >= 2 &&
+            board[y - 1][x] &&
+            board[y - 1][x] === board[y - 2][x]
+          ) {
+            choices = choices.filter((c) => c !== board[y - 1][x]);
+          }
+
+          row[x] = choices[Math.floor(Math.random() * choices.length)];
+        }
+        return row;
+      }
+
+      /* =====================
+   시작
+===================== */
+      render();
+    </script>
+  </body>
+</html>
