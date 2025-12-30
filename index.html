@@ -58,6 +58,18 @@
         cursor: pointer;
         z-index: 50;
       }
+      #menu {
+        position: absolute;
+        top: 44px;
+        right: -180px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: none;
+        background: #444;
+        color: #fff;
+        cursor: pointer;
+        z-index: 50;
+      }
 
       #combo {
         position: absolute;
@@ -120,6 +132,41 @@
         color: #fff;
         font-size: 32px;
       }
+
+      /* modal */
+      .modal-overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        background: rgba(0,0,0,0.6);
+        z-index: 200;
+      }
+      .modal-box {
+        background: #222;
+        color: #fff;
+        padding: 16px;
+        border-radius: 10px;
+        width: 260px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .modal-box h3 { margin: 0 0 8px 0; }
+      .modal-btn {
+        background: #333;
+        color: #fff;
+        border: none;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .modal-btn.primary { background: #2b7cff; }
+      .modal-close { position: absolute; top: 8px; right: 8px; background: transparent; border: none; color:#fff; font-size:18px; cursor:pointer }
     </style>
   </head>
 
@@ -141,9 +188,29 @@
 
       <div id="game">
         <button id="start">Start</button>
+        <button id="menu">Menu</button>
         <div id="board"></div>
         <div id="combo" style="display: none"></div>
+        <!-- BGM: replace src with your audio file (e.g. assets/bgm.wav) -->
+        <audio id="bgm" preload="auto" src="assets/bgm.wav"></audio>
         <div id="gameover">GAME OVER</div>
+        <div id="pauseModal" class="modal-overlay">
+          <div class="modal-box">
+            <button class="modal-close" id="modalClose">×</button>
+            <h3>Menu</h3>
+            <button class="modal-btn" id="resumeBtn">Resume</button>
+            <button class="modal-btn primary" id="restartBtn">Restart</button>
+            <button class="modal-btn" id="settingBtn">Setting</button>
+            <button class="modal-btn" id="titleBtn">Back to Title</button>
+            <div id="settingsPanel" style="display:none; margin-top:8px;">
+              <label style="font-size:12px;opacity:0.9">BGM Volume</label>
+              <input id="bgmVol" type="range" min="0" max="1" step="0.01" value="0.5">
+              <label style="font-size:12px;opacity:0.9">SFX Volume</label>
+              <input id="sfxVol" type="range" min="0" max="1" step="0.01" value="1">
+              <button class="modal-btn" id="settingsBack">Back</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -196,6 +263,301 @@
 ===================== */
       const boardEl = document.getElementById("board");
       const gameOverEl = document.getElementById("gameover");
+      const menuBtnEl = document.getElementById("menu");
+      const pauseModalEl = document.getElementById("pauseModal");
+      const resumeBtn = document.getElementById("resumeBtn");
+      const restartBtn = document.getElementById("restartBtn");
+      const settingBtn = document.getElementById("settingBtn");
+      const titleBtn = document.getElementById("titleBtn");
+      const modalClose = document.getElementById("modalClose");
+      const settingsPanel = document.getElementById("settingsPanel");
+      const settingsBack = document.getElementById("settingsBack");
+      const bgmVol = document.getElementById("bgmVol");
+      const sfxVol = document.getElementById("sfxVol");
+      const bgmEl = document.getElementById("bgm");
+      // Prefer Web Audio API for gapless looping; fall back to HTMLAudio
+      const supportsWebAudio = !!(
+        window.AudioContext || window.webkitAudioContext
+      );
+      let audioCtx = null;
+      let bgmBuffer = null;
+      let bgmSource = null;
+      let bgmGain = null;
+
+      async function decodeBgm(url) {
+        try {
+          if (!audioCtx)
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const res = await fetch(url);
+          const arr = await res.arrayBuffer();
+          bgmBuffer = await audioCtx.decodeAudioData(arr);
+        } catch (e) {
+          console.warn("decodeBgm failed", e);
+          bgmBuffer = null;
+        }
+      }
+
+      // modal/menu state
+      let menuWasRunningRise = false;
+      let htmlBgmWasPlaying = false;
+
+      function openMenuModal() {
+        if (!pauseModalEl) return;
+        // suspend game systems
+        menuWasRunningRise = !!riseTimer;
+        if (riseTimer) {
+          clearInterval(riseTimer);
+          riseTimer = null;
+        }
+        suspendGame = true;
+
+        // suspend audio
+        try {
+          if (supportsWebAudio && audioCtx && audioCtx.state === 'running') {
+            audioCtx.suspend().catch(() => {});
+          } else if (bgmEl && !bgmEl.paused) {
+            htmlBgmWasPlaying = true;
+            bgmEl.pause();
+          }
+        } catch (e) {}
+
+        pauseModalEl.style.display = 'flex';
+      }
+
+      function closeMenuModal() {
+        if (!pauseModalEl) return;
+        pauseModalEl.style.display = 'none';
+        // resume audio
+        try {
+          if (supportsWebAudio && audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+          } else if (bgmEl && htmlBgmWasPlaying) {
+            bgmEl.play().catch(() => {});
+            htmlBgmWasPlaying = false;
+          }
+        } catch (e) {}
+
+        // resume rise if it was running
+        if (menuWasRunningRise) startRise();
+        suspendGame = false;
+      }
+
+      function onResumeClick() {
+        closeMenuModal();
+      }
+
+      function onRestartClick() {
+        // close modal then restart game
+        pauseModalEl.style.display = 'none';
+        suspendGame = false;
+        resetGame();
+        startGame();
+      }
+
+      function onSettingClick() {
+        if (!settingsPanel) return;
+        settingsPanel.style.display = 'block';
+      }
+
+      function onSettingsBack() {
+        if (!settingsPanel) return;
+        settingsPanel.style.display = 'none';
+      }
+
+      function onTitleClick() {
+        // go back to title / pre-start
+        pauseModalEl.style.display = 'none';
+        resetGame();
+      }
+
+      function onModalClose() { closeMenuModal(); }
+
+      if (menuBtnEl) menuBtnEl.addEventListener('click', openMenuModal);
+      if (resumeBtn) resumeBtn.addEventListener('click', onResumeClick);
+      if (restartBtn) restartBtn.addEventListener('click', onRestartClick);
+      if (settingBtn) settingBtn.addEventListener('click', onSettingClick);
+      if (titleBtn) titleBtn.addEventListener('click', onTitleClick);
+      if (modalClose) modalClose.addEventListener('click', onModalClose);
+      if (settingsBack) settingsBack.addEventListener('click', onSettingsBack);
+
+      // keyboard: Escape opens menu when playing
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          if (pauseModalEl && pauseModalEl.style.display === 'flex') closeMenuModal();
+          else if (gameStarted && !gameOver) openMenuModal();
+        }
+      });
+
+      // settings sliders
+      if (bgmVol) {
+        bgmVol.addEventListener('input', (e) => {
+          const v = parseFloat(e.target.value);
+          if (bgmEl) bgmEl.volume = v;
+          if (bgmGain) try { bgmGain.gain.setValueAtTime(v, audioCtx.currentTime); } catch (e) {}
+        });
+      }
+      if (sfxVol) {
+        sfxVol.addEventListener('input', (e) => {
+          const v = parseFloat(e.target.value);
+          // adjust global SFX multiplier by changing GLOBAL_SFX_GAIN isn't possible (const), apply by overwriting variable
+          // but we'll store as runtime multiplier
+          window.__SFX_USER_MULT = v;
+        });
+      }
+
+
+      function playBgmWebAudio(opts = {}) {
+        if (!supportsWebAudio || !bgmBuffer) return false;
+        const fadeIn = typeof opts.fadeIn === "number" ? opts.fadeIn : 0.4;
+        // stop existing source if any
+        try {
+          if (bgmSource) bgmSource.stop();
+        } catch (e) {}
+        bgmSource && bgmSource.disconnect();
+        bgmGain && bgmGain.disconnect();
+
+        bgmSource = audioCtx.createBufferSource();
+        bgmGain = audioCtx.createGain();
+        bgmSource.buffer = bgmBuffer;
+        bgmSource.loop = true;
+        bgmSource.connect(bgmGain);
+        bgmGain.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+        bgmGain.gain.setValueAtTime(0, now);
+        bgmSource.start(0);
+        bgmGain.gain.linearRampToValueAtTime(0.5, now + fadeIn);
+        return true;
+      }
+
+      function stopBgmWebAudio(opts = {}) {
+        if (!supportsWebAudio || !bgmSource || !bgmGain) return;
+        const fadeOut = typeof opts.fadeOut === "number" ? opts.fadeOut : 0.25;
+        const now = audioCtx.currentTime;
+        try {
+          bgmGain.gain.cancelScheduledValues(now);
+        } catch (e) {}
+        bgmGain.gain.setValueAtTime(bgmGain.gain.value || 0.5, now);
+        bgmGain.gain.linearRampToValueAtTime(0, now + fadeOut);
+        setTimeout(() => {
+          try {
+            bgmSource.stop();
+          } catch (e) {}
+          bgmSource.disconnect();
+          bgmGain.disconnect();
+          bgmSource = null;
+          bgmGain = null;
+        }, (fadeOut + 0.05) * 1000);
+      }
+
+      if (bgmEl) {
+        bgmEl.loop = true;
+        bgmEl.volume = 0.5; // 0.0 ~ 1.0
+        // Fallback: some browsers may not honor `loop` reliably in all cases,
+        // ensure playback restarts when ended.
+        bgmEl.addEventListener("ended", () => {
+          try {
+            bgmEl.currentTime = 0;
+            const p = bgmEl.play();
+            if (p && p.catch) p.catch(() => {});
+          } catch (e) {
+            /* ignore */
+          }
+        });
+      }
+
+      // try to pre-decode BGM for gapless start (best-effort)
+      if (supportsWebAudio) {
+        decodeBgm("assets/bgm.wav").catch(() => {});
+      }
+
+      // -----------------
+      // SFX loader / player
+      // -----------------
+      // global SFX normalization in dB (applied at runtime)
+      const GLOBAL_SFX_DB = -6;
+      const GLOBAL_SFX_GAIN = Math.pow(10, GLOBAL_SFX_DB / 20); // ~0.501
+      const sfxBuffers = {};
+      const sfxAudioEls = {};
+
+      async function loadSfx(name, url) {
+        if (supportsWebAudio) {
+          try {
+            if (!audioCtx)
+              audioCtx = new (window.AudioContext ||
+                window.webkitAudioContext)();
+            const res = await fetch(url);
+            const arr = await res.arrayBuffer();
+            const buf = await audioCtx.decodeAudioData(arr);
+            sfxBuffers[name] = buf;
+            return buf;
+          } catch (e) {
+            console.warn("loadSfx webaudio failed", name, e);
+            sfxBuffers[name] = null;
+          }
+        }
+        // fallback: create HTMLAudio element
+        try {
+          const a = new Audio(url);
+          a.preload = "auto";
+          sfxAudioEls[name] = a;
+          return a;
+        } catch (e) {
+          console.warn("loadSfx fallback failed", name, e);
+          return null;
+        }
+      }
+
+      function playSfx(name, opts = {}) {
+        const volume = typeof opts.volume === "number" ? opts.volume : 1;
+        const playbackRate =
+          typeof opts.playbackRate === "number" ? opts.playbackRate : 1;
+        // runtime SFX multiplier from settings (default 1)
+        const userMul = typeof window.__SFX_USER_MULT === 'number' ? window.__SFX_USER_MULT : 1;
+        if (supportsWebAudio && sfxBuffers[name]) {
+          try {
+            if (!audioCtx)
+              audioCtx = new (window.AudioContext ||
+                window.webkitAudioContext)();
+            const src = audioCtx.createBufferSource();
+            const gain = audioCtx.createGain();
+            src.buffer = sfxBuffers[name];
+            src.playbackRate.value = playbackRate;
+            gain.gain.value = volume * GLOBAL_SFX_GAIN * userMul;
+            src.connect(gain);
+            gain.connect(audioCtx.destination);
+            src.start(0);
+            // auto-disconnect after sound end
+            src.onended = () => {
+              try {
+                src.disconnect();
+                gain.disconnect();
+              } catch (e) {}
+            };
+            return true;
+          } catch (e) {
+            // fallthrough to HTMLAudio fallback
+            console.warn("playSfx webaudio error", name, e);
+          }
+        }
+        const a = sfxAudioEls[name];
+        if (a) {
+          try {
+            const clone = a.cloneNode();
+            clone.volume = Math.max(0, Math.min(1, volume * GLOBAL_SFX_GAIN * userMul));
+            clone.playbackRate = playbackRate;
+            clone.play().catch(() => {});
+            return true;
+          } catch (e) {
+            console.warn("playSfx htmlaudio error", name, e);
+          }
+        }
+        return false;
+      }
+
+      // preload expected SFX (best-effort)
+      loadSfx("swap", "assets/swap.wav");
+      loadSfx("remove", "assets/remove.wav");
+      loadSfx("cursor", "assets/cursor.wav");
 
       function render() {
         try {
@@ -313,15 +675,31 @@
         switch (e.key) {
           case "ArrowLeft":
             cursor.x = Math.max(0, cursor.x - 1);
+            playSfx("cursor", {
+              volume: 0.18,
+              playbackRate: 1 + (Math.random() - 0.5) * 0.08,
+            });
             break;
           case "ArrowRight":
             cursor.x = Math.min(W - 2, cursor.x + 1);
+            playSfx("cursor", {
+              volume: 0.18,
+              playbackRate: 1 + (Math.random() - 0.5) * 0.08,
+            });
             break;
           case "ArrowUp":
             cursor.y = Math.max(0, cursor.y - 1);
+            playSfx("cursor", {
+              volume: 0.18,
+              playbackRate: 1 + (Math.random() - 0.5) * 0.08,
+            });
             break;
           case "ArrowDown":
             cursor.y = Math.min(H - 1, cursor.y + 1);
+            playSfx("cursor", {
+              volume: 0.18,
+              playbackRate: 1 + (Math.random() - 0.5) * 0.08,
+            });
             break;
           case " ":
             e.preventDefault();
@@ -332,6 +710,13 @@
             break;
         }
         render();
+      });
+
+      // Global mute toggle (works anytime): press `M` to toggle mute
+      document.addEventListener("keydown", (e) => {
+        if (e.key && e.key.toLowerCase() === "m") {
+          if (bgmEl) bgmEl.muted = !bgmEl.muted;
+        }
       });
 
       // Reset shortcut removed per user preference
@@ -346,6 +731,36 @@
         // hide start button
         if (startBtn) startBtn.style.display = "none";
         gameOver = false;
+        // play bgm on the user gesture (Start button)
+        if (supportsWebAudio) {
+          try {
+            if (!audioCtx)
+              audioCtx = new (window.AudioContext ||
+                window.webkitAudioContext)();
+            if (audioCtx.state === "suspended") audioCtx.resume();
+            if (bgmBuffer) playBgmWebAudio({ fadeIn: 0.35 });
+            else
+              decodeBgm("assets/bgm.wav")
+                .then(() => {
+                  try {
+                    if (audioCtx.state === "suspended") audioCtx.resume();
+                  } catch (e) {}
+                  playBgmWebAudio({ fadeIn: 0.35 });
+                })
+                .catch((e) => console.warn("bgm load failed", e));
+          } catch (e) {
+            console.warn("web audio play error", e);
+          }
+        } else if (bgmEl) {
+          try {
+            bgmEl.currentTime = 0;
+            const p = bgmEl.play();
+            if (p && p.catch)
+              p.catch((e) => console.warn("bgm play blocked", e));
+          } catch (e) {
+            console.warn("bgm play error", e);
+          }
+        }
         // ensure timers reset
         if (riseTimer) clearInterval(riseTimer);
         startRise();
@@ -376,11 +791,15 @@
 
           if (board[0].some((v) => v !== null)) {
             gameOver = true;
+            // pause/stop bgm when game over
+            if (supportsWebAudio) stopBgmWebAudio({ fadeOut: 0.25 });
+            else if (bgmEl) bgmEl.pause();
             render();
             return;
           }
 
-          for (let y = 0; y < H - 1; y++) board[y] = board[y + 1];
+          // copy rows instead of assigning references to avoid shared-row side-effects
+          for (let y = 0; y < H - 1; y++) board[y] = board[y + 1].slice();
           board[H - 1] = generateSafeRow(H - 1);
 
           // 보드가 위로 올라갈 때 선택 커서도 한 칸 올라가도록 동기화
@@ -415,6 +834,10 @@
 
       function animateSwap(x, y) {
         console.log("animateSwap start", x, y);
+        playSfx("swap", {
+          volume: 0.35,
+          playbackRate: 1 + (Math.random() - 0.5) * 0.06,
+        });
         const aColor = board[y][x];
         const bColor = board[y][x + 1];
 
@@ -546,6 +969,15 @@
         const scoreEl = document.getElementById("score-value");
         if (scoreEl) scoreEl.textContent = "0";
 
+        // stop bgm on reset
+        if (supportsWebAudio) stopBgmWebAudio({ fadeOut: 0 });
+        if (bgmEl) {
+          try {
+            bgmEl.pause();
+            bgmEl.currentTime = 0;
+          } catch (e) {}
+        }
+
         // reset rise interval
         riseInterval = BASE_RISE_INTERVAL;
 
@@ -589,6 +1021,8 @@
       function gravityUntilStable() {
         if (gravityTimer) return;
         console.log("gravity start");
+        // suspend rise while gravity is resolving to avoid race with rising
+        suspendGame = true;
         gravityTimer = setInterval(() => {
           const moved = applyGravityStep();
           if (moved) {
@@ -596,7 +1030,8 @@
           } else {
             clearInterval(gravityTimer);
             gravityTimer = null;
-            // 안정화되면 새 매치를 체크하여 연쇄 처리
+            // gravity finished -> resume game systems and check for new matches
+            suspendGame = false;
             setTimeout(() => resolve(), 0);
           }
         }, 80);
@@ -666,6 +1101,11 @@
         }
 
         // push unique coords with frame counter
+        // suspend rise/other systems while removal animation runs to avoid
+        // index mismatch when rows might shift (rise) during removal
+        suspendGame = true;
+        // play removal sfx once per removal wave
+        playSfx("remove", { volume: 1.0, playbackRate: 1 });
         for (const s of seen) {
           const [x, y] = s.split(",").map(Number);
           removing.push({ x, y, frame: 0 });
@@ -688,8 +1128,14 @@
             clearInterval(removalTimer);
             removalTimer = null;
             // 제거 완료 후 중력 적용
-            if (hasFloating()) gravityUntilStable();
-            else setTimeout(() => resolve(), 0);
+            if (hasFloating()) {
+              // keep suspendGame true while gravity resolves
+              gravityUntilStable();
+            } else {
+              // no gravity to wait for -> resume game systems
+              suspendGame = false;
+              setTimeout(() => resolve(), 0);
+            }
           }
         }, REMOVAL_INTERVAL);
       }
