@@ -140,7 +140,7 @@
         display: none;
         justify-content: center;
         align-items: center;
-        background: rgba(0,0,0,0.6);
+        background: rgba(0, 0, 0, 0.6);
         z-index: 200;
       }
       .modal-box {
@@ -149,13 +149,15 @@
         padding: 16px;
         border-radius: 10px;
         width: 260px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
         display: flex;
         flex-direction: column;
         gap: 8px;
         align-items: stretch;
       }
-      .modal-box h3 { margin: 0 0 8px 0; }
+      .modal-box h3 {
+        margin: 0 0 8px 0;
+      }
       .modal-btn {
         background: #333;
         color: #fff;
@@ -165,8 +167,19 @@
         cursor: pointer;
         text-align: left;
       }
-      .modal-btn.primary { background: #2b7cff; }
-      .modal-close { position: absolute; top: 8px; right: 8px; background: transparent; border: none; color:#fff; font-size:18px; cursor:pointer }
+      .modal-btn.primary {
+        background: #2b7cff;
+      }
+      .modal-close {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: transparent;
+        border: none;
+        color: #fff;
+        font-size: 18px;
+        cursor: pointer;
+      }
     </style>
   </head>
 
@@ -202,11 +215,25 @@
             <button class="modal-btn primary" id="restartBtn">Restart</button>
             <button class="modal-btn" id="settingBtn">Setting</button>
             <button class="modal-btn" id="titleBtn">Back to Title</button>
-            <div id="settingsPanel" style="display:none; margin-top:8px;">
-              <label style="font-size:12px;opacity:0.9">BGM Volume</label>
-              <input id="bgmVol" type="range" min="0" max="1" step="0.01" value="0.5">
-              <label style="font-size:12px;opacity:0.9">SFX Volume</label>
-              <input id="sfxVol" type="range" min="0" max="1" step="0.01" value="1">
+            <div id="settingsPanel" style="display: none; margin-top: 8px">
+              <label style="font-size: 12px; opacity: 0.9">BGM Volume</label>
+              <input
+                id="bgmVol"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.5"
+              />
+              <label style="font-size: 12px; opacity: 0.9">SFX Volume</label>
+              <input
+                id="sfxVol"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="1"
+              />
               <button class="modal-btn" id="settingsBack">Back</button>
             </div>
           </div>
@@ -313,7 +340,7 @@
 
         // suspend audio
         try {
-          if (supportsWebAudio && audioCtx && audioCtx.state === 'running') {
+          if (supportsWebAudio && audioCtx && audioCtx.state === "running") {
             audioCtx.suspend().catch(() => {});
           } else if (bgmEl && !bgmEl.paused) {
             htmlBgmWasPlaying = true;
@@ -321,15 +348,15 @@
           }
         } catch (e) {}
 
-        pauseModalEl.style.display = 'flex';
+        pauseModalEl.style.display = "flex";
       }
 
       function closeMenuModal() {
         if (!pauseModalEl) return;
-        pauseModalEl.style.display = 'none';
+        pauseModalEl.style.display = "none";
         // resume audio
         try {
-          if (supportsWebAudio && audioCtx && audioCtx.state === 'suspended') {
+          if (supportsWebAudio && audioCtx && audioCtx.state === "suspended") {
             audioCtx.resume().catch(() => {});
           } else if (bgmEl && htmlBgmWasPlaying) {
             bgmEl.play().catch(() => {});
@@ -348,7 +375,7 @@
 
       function onRestartClick() {
         // close modal then restart game
-        pauseModalEl.style.display = 'none';
+        pauseModalEl.style.display = "none";
         suspendGame = false;
         resetGame();
         startGame();
@@ -356,55 +383,67 @@
 
       function onSettingClick() {
         if (!settingsPanel) return;
-        settingsPanel.style.display = 'block';
+        settingsPanel.style.display = "block";
       }
 
       function onSettingsBack() {
         if (!settingsPanel) return;
-        settingsPanel.style.display = 'none';
+        settingsPanel.style.display = "none";
       }
 
       function onTitleClick() {
         // go back to title / pre-start
-        pauseModalEl.style.display = 'none';
+        pauseModalEl.style.display = "none";
         resetGame();
       }
 
-      function onModalClose() { closeMenuModal(); }
+      function onModalClose() {
+        closeMenuModal();
+      }
 
-      if (menuBtnEl) menuBtnEl.addEventListener('click', openMenuModal);
-      if (resumeBtn) resumeBtn.addEventListener('click', onResumeClick);
-      if (restartBtn) restartBtn.addEventListener('click', onRestartClick);
-      if (settingBtn) settingBtn.addEventListener('click', onSettingClick);
-      if (titleBtn) titleBtn.addEventListener('click', onTitleClick);
-      if (modalClose) modalClose.addEventListener('click', onModalClose);
-      if (settingsBack) settingsBack.addEventListener('click', onSettingsBack);
+      if (menuBtnEl) menuBtnEl.addEventListener("click", openMenuModal);
+      if (resumeBtn) resumeBtn.addEventListener("click", onResumeClick);
+      if (restartBtn) restartBtn.addEventListener("click", onRestartClick);
+      if (settingBtn) settingBtn.addEventListener("click", onSettingClick);
+      if (titleBtn) titleBtn.addEventListener("click", onTitleClick);
+      if (modalClose) modalClose.addEventListener("click", onModalClose);
+      if (settingsBack) settingsBack.addEventListener("click", onSettingsBack);
 
       // keyboard: Escape opens menu when playing
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          if (pauseModalEl && pauseModalEl.style.display === 'flex') closeMenuModal();
-          else if (gameStarted && !gameOver) openMenuModal();
+      document.addEventListener("keydown", (e) => {
+        // Ctrl 키로 즉시 한 줄 상승시키기
+        if (e.key === "Control") {
+          if (gameStarted && !gameOver && !suspendGame) {
+            doRise();
+          }
+          return;
+        }
+
+        if (!gameStarted || gameOver || suspendGame) return;
+
+        if (e.key === keyBindings.left) {
         }
       });
 
       // settings sliders
       if (bgmVol) {
-        bgmVol.addEventListener('input', (e) => {
+        bgmVol.addEventListener("input", (e) => {
           const v = parseFloat(e.target.value);
           if (bgmEl) bgmEl.volume = v;
-          if (bgmGain) try { bgmGain.gain.setValueAtTime(v, audioCtx.currentTime); } catch (e) {}
+          if (bgmGain)
+            try {
+              bgmGain.gain.setValueAtTime(v, audioCtx.currentTime);
+            } catch (e) {}
         });
       }
       if (sfxVol) {
-        sfxVol.addEventListener('input', (e) => {
+        sfxVol.addEventListener("input", (e) => {
           const v = parseFloat(e.target.value);
           // adjust global SFX multiplier by changing GLOBAL_SFX_GAIN isn't possible (const), apply by overwriting variable
           // but we'll store as runtime multiplier
           window.__SFX_USER_MULT = v;
         });
       }
-
 
       function playBgmWebAudio(opts = {}) {
         if (!supportsWebAudio || !bgmBuffer) return false;
@@ -512,7 +551,10 @@
         const playbackRate =
           typeof opts.playbackRate === "number" ? opts.playbackRate : 1;
         // runtime SFX multiplier from settings (default 1)
-        const userMul = typeof window.__SFX_USER_MULT === 'number' ? window.__SFX_USER_MULT : 1;
+        const userMul =
+          typeof window.__SFX_USER_MULT === "number"
+            ? window.__SFX_USER_MULT
+            : 1;
         if (supportsWebAudio && sfxBuffers[name]) {
           try {
             if (!audioCtx)
@@ -543,7 +585,10 @@
         if (a) {
           try {
             const clone = a.cloneNode();
-            clone.volume = Math.max(0, Math.min(1, volume * GLOBAL_SFX_GAIN * userMul));
+            clone.volume = Math.max(
+              0,
+              Math.min(1, volume * GLOBAL_SFX_GAIN * userMul)
+            );
             clone.playbackRate = playbackRate;
             clone.play().catch(() => {});
             return true;
@@ -786,31 +831,33 @@
       function startRise() {
         if (riseTimer) clearInterval(riseTimer);
         riseTimer = setInterval(() => {
-          console.log("rise tick");
-          if (gameOver || suspendGame) return;
-
-          if (board[0].some((v) => v !== null)) {
-            gameOver = true;
-            // pause/stop bgm when game over
-            if (supportsWebAudio) stopBgmWebAudio({ fadeOut: 0.25 });
-            else if (bgmEl) bgmEl.pause();
-            render();
-            return;
-          }
-
-          // copy rows instead of assigning references to avoid shared-row side-effects
-          for (let y = 0; y < H - 1; y++) board[y] = board[y + 1].slice();
-          board[H - 1] = generateSafeRow(H - 1);
-
-          // 보드가 위로 올라갈 때 선택 커서도 한 칸 올라가도록 동기화
-          cursor.y = Math.max(0, cursor.y - 1);
-
-          resolve();
-          render();
+          doRise();
         }, riseInterval);
       }
 
       // do NOT auto-start rise; wait for player to press Start
+
+      // single-rise helper: perform one rise tick immediately
+      function doRise() {
+        console.log("manual rise");
+        if (gameOver || suspendGame) return;
+
+        if (board[0].some((v) => v !== null)) {
+          gameOver = true;
+          if (supportsWebAudio) stopBgmWebAudio({ fadeOut: 0.25 });
+          else if (bgmEl) bgmEl.pause();
+          render();
+          return;
+        }
+
+        for (let y = 0; y < H - 1; y++) board[y] = board[y + 1].slice();
+        board[H - 1] = generateSafeRow(H - 1);
+
+        cursor.y = Math.max(0, cursor.y - 1);
+
+        resolve();
+        render();
+      }
 
       /* =====================
    로직
@@ -1104,8 +1151,8 @@
         // suspend rise/other systems while removal animation runs to avoid
         // index mismatch when rows might shift (rise) during removal
         suspendGame = true;
-        // play removal sfx once per removal wave
-        playSfx("remove", { volume: 1.0, playbackRate: 1 });
+        // play removal sfx once per removal wave (reduced volume)
+        playSfx("remove", { volume: 0.35, playbackRate: 1 });
         for (const s of seen) {
           const [x, y] = s.split(",").map(Number);
           removing.push({ x, y, frame: 0 });
