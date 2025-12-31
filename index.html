@@ -715,7 +715,8 @@
    입력
 ===================== */
       document.addEventListener("keydown", (e) => {
-        if (!gameStarted || gameOver || suspendGame) return;
+        // Allow cursor movement even while game systems are suspended
+        if (!gameStarted || gameOver) return;
 
         switch (e.key) {
           case "ArrowLeft":
@@ -748,6 +749,8 @@
             break;
           case " ":
             e.preventDefault();
+            // don't allow swaps while game systems are suspended (e.g., during removal/gravity)
+            if (suspendGame) break;
             if (swap(cursor.x, cursor.y)) {
               // player initiated action -> reset combo
               combo = 0;
