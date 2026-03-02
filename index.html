@@ -409,21 +409,7 @@
       if (modalClose) modalClose.addEventListener("click", onModalClose);
       if (settingsBack) settingsBack.addEventListener("click", onSettingsBack);
 
-      // keyboard: Escape opens menu when playing
-      document.addEventListener("keydown", (e) => {
-        // Ctrl 키로 즉시 한 줄 상승시키기
-        if (e.key === "Control") {
-          if (gameStarted && !gameOver && !suspendGame) {
-            doRise();
-          }
-          return;
-        }
-
-        if (!gameStarted || gameOver || suspendGame) return;
-
-        if (e.key === keyBindings.left) {
-        }
-      });
+      // Note: key handling consolidated later; stray/duplicate listener removed
 
       // settings sliders
       if (bgmVol) {
