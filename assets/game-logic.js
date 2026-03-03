@@ -5,12 +5,12 @@ import { state } from "./state.js";
 import {
   W,
   H,
-  COLORS,
   REMOVAL_INTERVAL,
   REMOVAL_FRAMES,
   LEVEL_THRESHOLDS,
   LEVEL_INTERVALS,
   MIN_INTERVAL,
+  getActiveColors,
 } from "./constants.js";
 import { playSfx } from "./audio.js";
 import { render } from "./ui.js";
@@ -55,8 +55,9 @@ function updateLevelAndRise() {
 ───────────────────────────────────────────────────────────── */
 export function generateSafeRow(y) {
   const row = [];
+  const activeColors = getActiveColors(state.level);
   for (let x = 0; x < W; x++) {
-    let choices = COLORS.slice();
+    let choices = activeColors.slice();
     if (x >= 2 && row[x - 1] === row[x - 2])
       choices = choices.filter((c) => c !== row[x - 1]);
     if (

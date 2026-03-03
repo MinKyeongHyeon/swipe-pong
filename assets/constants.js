@@ -4,7 +4,17 @@
 
 export const W = 6;
 export const H = 12;
-export const COLORS = ["R", "G", "B", "Y"];
+export const COLORS = ["R", "G", "B", "Y", "P", "K"];
+
+// 레벨별 활성 색상 — 레벨이 오를수록 색 점진 추가
+// Level  0-3 : 4색 (R G B Y)
+// Level  4-7 : 5색 (+ P 보라)
+// Level  8+  : 6색 (+ K 핑크)
+export function getActiveColors(level) {
+  if (level >= 8) return COLORS;
+  if (level >= 4) return COLORS.slice(0, 5);
+  return COLORS.slice(0, 4);
+}
 
 export const BASE_RISE_INTERVAL = 3500;
 
