@@ -1,0 +1,370 @@
+/* ============================================================
+   retro.css — GameBoy Advance 스타일 UI
+   ============================================================ */
+
+/* ── 1. GBA 팔레트 CSS 변수 ─────────────────────────────────────────────── */
+:root {
+  --gba-bg: #0d0d1a;
+  --gba-board: #1a1a30;
+  --gba-empty: #222244;
+  --gba-panel: #14142a;
+  --gba-border: #3a3a6a;
+  --gba-accent: #7070ff;
+  --gba-accent2: #ff6090;
+  --gba-text: #f8f8ff;
+  --gba-muted: #8888bb;
+  --gba-gold: #ffd700;
+  --gba-shadow: #08080f;
+  --gba-r: #ff3030;
+  --gba-g: #00d040;
+  --gba-b: #2070ff;
+  --gba-y: #ffd000;
+}
+
+/* ── 2. 전역 기반 ────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--gba-bg);
+  color: var(--gba-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  min-height: 100vh;
+}
+
+/* ── 3. 레이아웃 ─────────────────────────────────────────────────────────── */
+.container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 20px 16px;
+  min-height: 100vh;
+}
+
+@media (max-width: 600px) {
+  .container {
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px;
+    gap: 12px;
+  }
+}
+
+/* ── 4. 캔버스 래퍼 (GBA 기기 느낌의 베젤) ──────────────────────────────── */
+.canvas-wrap {
+  position: relative;
+  padding: 10px;
+  background: var(--gba-panel);
+  border: 2px solid var(--gba-border);
+  border-radius: 6px;
+  /* 외곽 발광 */
+  box-shadow:
+    0 0 0 1px var(--gba-shadow),
+    0 0 18px 2px rgba(100, 100, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* ── 5. 게임 캔버스 ──────────────────────────────────────────────────────── */
+#game-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  image-rendering: -moz-crisp-edges;
+  cursor: crosshair;
+  border-radius: 2px;
+}
+
+/* ── 6. 게임 영역 ────────────────────────────────────────────────────────── */
+#game {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+#board {
+  display: none !important;
+}
+
+/* ── 7. 스코어보드 (GBA 측면 패널 스타일) ───────────────────────────────── */
+#scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 130px;
+  padding: 16px 14px;
+  background: var(--gba-panel);
+  border: 1px solid var(--gba-border);
+  border-radius: 6px;
+  color: var(--gba-text);
+  box-shadow:
+    0 0 12px rgba(80, 80, 200, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 각 스탯 블록 */
+#scoreboard h3 {
+  margin: 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gba-muted);
+}
+
+/* 점수 레이블/값 공통 래퍼 */
+.stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gba-muted);
+}
+
+#score-value {
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--gba-text);
+  line-height: 1;
+  text-shadow: 0 0 8px rgba(120, 120, 255, 0.5);
+}
+
+#highscore {
+  font-size: 0.78rem;
+  color: var(--gba-muted);
+}
+#highscore-value {
+  color: var(--gba-gold);
+  font-weight: 600;
+}
+
+#level {
+  font-size: 0.78rem;
+  color: var(--gba-muted);
+}
+#level-value {
+  color: var(--gba-accent);
+  font-weight: 600;
+}
+
+/* 타일 범례 */
+.tile-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  margin-top: 4px;
+}
+.tile-dot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.65rem;
+  color: var(--gba-muted);
+}
+.tile-dot::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.tile-dot.r::before {
+  background: var(--gba-r);
+}
+.tile-dot.g::before {
+  background: var(--gba-g);
+}
+.tile-dot.b::before {
+  background: var(--gba-b);
+}
+.tile-dot.y::before {
+  background: var(--gba-y);
+}
+
+/* ── 8. 버튼 (GBA A/B 버튼 느낌) ────────────────────────────────────────── */
+button {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 16px;
+  background: linear-gradient(180deg, #3a3a70 0%, #22224a 100%);
+  color: var(--gba-text);
+  border: 1px solid var(--gba-border);
+  border-bottom: 2px solid var(--gba-shadow);
+  border-radius: 20px; /* GBA 둥근 버튼 */
+  cursor: pointer;
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition:
+    filter 0.1s,
+    transform 0.08s;
+}
+button:hover {
+  filter: brightness(1.25);
+}
+button:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Start / Menu 버튼 위치 조정 (캔버스 위쪽) */
+#start,
+#menu {
+  position: static;
+  border-radius: 20px;
+}
+#start {
+  background: linear-gradient(180deg, #5050c0 0%, #302880 100%);
+}
+#menu {
+  background: linear-gradient(180deg, #404040 0%, #282828 100%);
+}
+
+/* ── 9. 콤보 오버레이 ────────────────────────────────────────────────────── */
+#combo {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--gba-gold);
+  text-shadow:
+    0 0 10px rgba(255, 215, 0, 0.8),
+    0 0 2px #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── 10. 게임 오버 오버레이 ──────────────────────────────────────────────── */
+#gameover {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 8, 20, 0.88);
+  color: var(--gba-accent2);
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(255, 80, 140, 0.7);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 2px;
+}
+#gameover.visible {
+  display: flex;
+}
+
+/* ── 11. 모달 ────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 20, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(2px);
+}
+.modal-box {
+  background: var(--gba-panel);
+  border: 1px solid var(--gba-border);
+  border-radius: 8px;
+  padding: 24px 20px;
+  min-width: 230px;
+  color: var(--gba-text);
+  box-shadow:
+    0 0 24px rgba(80, 80, 200, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.modal-box h3 {
+  margin: 0 0 16px;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gba-accent);
+}
+.modal-btn {
+  background: linear-gradient(180deg, #2a2a50 0%, #1a1a35 100%);
+  color: var(--gba-text);
+  border: 1px solid var(--gba-border);
+  border-radius: 16px;
+  padding: 9px 14px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 0.78rem;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+  transition: filter 0.1s;
+  width: 100%;
+  margin-bottom: 6px;
+}
+.modal-btn:hover {
+  filter: brightness(1.3);
+}
+.modal-btn.primary {
+  background: linear-gradient(180deg, #5050c0 0%, #302880 100%);
+  border-color: var(--gba-accent);
+}
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--gba-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.modal-close:hover {
+  color: var(--gba-text);
+}
+
+/* range input (설정 슬라이더) */
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--gba-accent);
+  margin: 4px 0 8px;
+}
+
+/* ── 12. 반응형 ──────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  #scoreboard {
+    min-width: 100px;
+    padding: 12px 10px;
+    gap: 8px;
+  }
+  #score-value {
+    font-size: 1.3rem;
+  }
+  button {
+    padding: 6px 12px;
+    font-size: 0.7rem;
+  }
+}
