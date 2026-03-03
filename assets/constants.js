@@ -31,5 +31,7 @@ export const LEVEL_THRESHOLDS = (function () {
 })();
 
 // 레벨별 rise 인터벌(ms) — 초반 급감, 후반 완만
-export const LEVEL_INTERVALS = [3500, 3000, 2550, 2150, 1800, 1500, 1250];
-export const MIN_INTERVAL = 1250;
+export const LEVEL_INTERVALS = [
+  3500, 3000, 2550, 2150, 1800, 1500, 1250, 1000, 750, 500,
+];
+export const MIN_INTERVAL = 500;
