@@ -20,7 +20,7 @@ export const GLOBAL_SFX_GAIN = Math.pow(10, GLOBAL_SFX_DB / 20); // ~0.501
 
 // 레벨별 누적 점수 임계값 — 간격이 점점 좁아지는 비선형 구조
 export const LEVEL_THRESHOLDS = (function () {
-  const gaps = [1000, 800, 600, 500, 400, 350, 300, 250, 200];
+  const gaps = [1000, 800, 600, 500];
   const t = [];
   let acc = 0;
   for (let i = 0; i < gaps.length; i++) {
@@ -31,7 +31,5 @@ export const LEVEL_THRESHOLDS = (function () {
 })();
 
 // 레벨별 rise 인터벌(ms) — 초반 급감, 후반 완만
-export const LEVEL_INTERVALS = [
-  3500, 3000, 2550, 2150, 1800, 1500, 1250, 1050, 900, 780,
-];
-export const MIN_INTERVAL = 550;
+export const LEVEL_INTERVALS = [3500, 3000, 2550, 2150, 1800, 1500, 1250];
+export const MIN_INTERVAL = 1250;
