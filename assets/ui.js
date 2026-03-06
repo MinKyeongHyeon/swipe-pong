@@ -63,6 +63,16 @@ export function initDom() {
   dom.retryBtn = document.getElementById("retryBtn");
   dom.titleFromGameoverBtn = document.getElementById("titleFromGameoverBtn");
   dom.leaderboardBack = document.getElementById("leaderboardBack");
+
+  // 이름 입력창: 영숫자 외 문자(한글 포함) 즉시 차단
+  if (dom.nameInput) {
+    dom.nameInput.addEventListener("input", () => {
+      const filtered = dom.nameInput.value.replace(/[^a-zA-Z0-9]/g, "");
+      if (filtered !== dom.nameInput.value) {
+        dom.nameInput.value = filtered;
+      }
+    });
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────

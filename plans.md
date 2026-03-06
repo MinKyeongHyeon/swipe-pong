@@ -378,6 +378,108 @@ if (state.screen === "title") {
 | **대전 모드 (로컬 2P)**     | 같은 화면에서 키보드 좌우 분할 입력, 콤보 발생 시 상대방 보드에 방해 블록 추가   | 신규 `pvp.js`, `state.js` 확장  |
 | **목표 기반 스테이지 모드** | "100점 내에 3콤보 이상 5회" 등 조건 달성 시 다음 스테이지 진출                   | 신규 `stages.js`                |
 
+## 테스트 계획 (Vitest 기반)
+
+### 도구 선택: Vitest
+
+- ESM 네이티브 지원 → 기존 `import/export` 수정 없이 사용
+- `vi.mock()`으로 DOM·Canvas·Audio 의존 모듈 격리
+- `package.json` + `vitest.config.js` 최소 설정만 필요
+- `npm test` 한 줄로 실행
+
+### 파트별 테스트 계획
+
+---
+
+#### Part 1. 상수 & 유틸 (`constants.js`)
+
+| 테스트 케이스           | 검증 내용                       |
+| ----------------------- | ------------------------------- |
+| `getActiveColors(0)`    | 4색 `[R,G,B,Y]` 반환            |
+| `getActiveColors(12)`   | 5색 반환 (P 포함)               |
+| `getActiveColors(24)`   | 6색 반환 (K 포함)               |
+| `levelToInterval(0)`    | `BASE_RISE_INTERVAL(3500)` 반환 |
+| `levelToInterval(1000)` | `MIN_INTERVAL(500)` 하한 준수   |
+| `scoreToLevel(0)`       | 레벨 0                          |
+| `scoreToLevel(400)`     | 레벨 1                          |
+| `scoreToLevel(399)`     | 레벨 0 (경계값 미만)            |
+
+---
+
+#### Part 2. 게임 로직 (`game-logic.js`)
+
+> `ui.js`, `audio.js`는 `vi.mock()`으로 빈 함수 대체
+
+| 테스트 케이스                        | 검증 내용                             |
+| ------------------------------------ | ------------------------------------- |
+| `generateSafeRow(y)` 가로 3연속 없음 | 같은 색이 3개 이상 연속되지 않음      |
+| `generateSafeRow(y)` 세로 3연속 없음 | 직전 2행과 동일한 위치에 같은 색 없음 |
+| `findMatches()` 가로 3연속 감지      | 매치 좌표 정확히 반환                 |
+| `findMatches()` 세로 3연속 감지      | 매치 좌표 정확히 반환                 |
+| `findMatches()` 연속 없을 때         | 빈 배열 반환                          |
+| `findMatches()` 4연속+               | 4개 모두 포함되어 반환                |
+
+---
+
+#### Part 3. 상태 관리 (`state.js`)
+
+> `localStorage`는 `vi.stubGlobal()`로 stub 처리
+
+| 테스트 케이스                           | 검증 내용                        |
+| --------------------------------------- | -------------------------------- |
+| `resetState()` 후 board                 | 전부 `null`인 12×6 배열          |
+| `resetState()` 후 score/combo/level     | 0 초기화                         |
+| `resetState()` 후 leaderboard/highscore | 보존됨                           |
+| `saveLeaderboard()`                     | `localStorage.setItem` 호출 확인 |
+| `loadLeaderboard()` 정상 JSON           | `state.leaderboard`에 반영       |
+| `loadLeaderboard()` 손상된 JSON         | 빈 배열로 폴백, 예외 없음        |
+| `loadLeaderboard()` 최대 10개 초과      | 10개로 슬라이싱                  |
+
+---
+
+#### Part 4. 리더보드 이름 등록 (`game-lifecycle.js`) ← 버그 포함
+
+> `ui.js`, `audio.js`, `state.js`는 mock
+
+| 테스트 케이스             | 검증 내용                                                                  |
+| ------------------------- | -------------------------------------------------------------------------- |
+| 영문 소문자 `"abc"` 입력  | `"ABC"` 저장                                                               |
+| 영문 3자 초과 `"abcdefg"` | `"ABC"` (3자 슬라이싱)                                                     |
+| 숫자 포함 `"a1b"`         | `"A1B"` 저장                                                               |
+| **한글 `"홍길동"` 입력**  | `"AAA"` 대신 `"???"` 또는 입력 자체가 차단됨 확인 (버그 재현 후 수정 검증) |
+| 빈 문자열 `""` 입력       | `"AAA"` fallback                                                           |
+| 특수문자만 `"!@#"` 입력   | `"AAA"` fallback                                                           |
+| 점수 등록 후 정렬         | 높은 점수가 앞으로 오는지                                                  |
+| 11개 등록 시              | 상위 10개만 유지                                                           |
+| 하이스코어 갱신           | `state.highscore` 업데이트 확인                                            |
+
+---
+
+#### Part 5. 입력 처리 (`input.js`)
+
+> `game-lifecycle.js`, `audio.js`, `ui.js`는 mock
+
+| 테스트 케이스                     | 검증 내용                                |
+| --------------------------------- | ---------------------------------------- |
+| `selectCell(0, 0)`                | `state.cursor` 업데이트                  |
+| `selectCell(-1, -1)`              | `cursor.x/y` 가 0 미만으로 내려가지 않음 |
+| `selectCell(99, 99)`              | `cursor.x` ≤ W-2, `cursor.y` ≤ H-1 상한  |
+| `confirmTitleMenu()` menuCursor=0 | `startGame()` 호출                       |
+| `confirmTitleMenu()` menuCursor=1 | `showScreen("leaderboard")` 호출         |
+| `confirmTitleMenu()` menuCursor=2 | `showScreen("settings")` 호출            |
+| game 화면이 아닐 때 `selectCell`  | `state.cursor` 변경 없음                 |
+
+---
+
+### 구현 순서
+
+1. `package.json` + `vitest.config.js` 초기 설정
+2. Part 1 (상수) → Part 3 (상태) → Part 2 (로직) 순으로 구현 — 의존성 낮은 것 먼저
+3. Part 4 (리더보드/버그) — 버그 재현 테스트 먼저 작성 → 수정 후 통과 확인
+4. Part 5 (입력) 마무리
+
+---
+
 ## Tier 3 — 리텐션 & 소셜 (높은 난이도 / 장기 로드맵)
 
 | 기능                | 설명                                                       | 연관 파일                      |

@@ -137,11 +137,14 @@ export function goToTitle() {
  * @param {number} score
  */
 export function submitScore(rawName, score) {
-  const name =
-    (rawName || "")
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 3) || "AAA";
+  const trimmed = (rawName || "").trim();
+  const sanitized = trimmed
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 3);
+  // 내용은 있지만 영숫자가 없는 경우(한글·특수문자 등) → "???" 표시
+  // 완전히 빈 입력 → "AAA" 폴백
+  const name = sanitized || (trimmed ? "???" : "AAA");
 
   const entry = {
     name,
