@@ -8,20 +8,29 @@ const _initialBoard = () =>
   Array.from({ length: H }, () => Array(W).fill(null));
 
 export const state = {
-  // 보드
+  // ── 화면 전환 ──────────────────────────────────────────────
+  /** @type {'title'|'game'|'gameover'|'leaderboard'|'settings'} */
+  screen: "title",
+  menuCursor: 0, // 타이틀 메뉴 커서 (0=Start, 1=Leaderboard, 2=Settings)
+
+  // ── 리더보드 ───────────────────────────────────────────────
+  /** @type {{ name: string, score: number, date: string }[]} */
+  leaderboard: [],
+
+  // ── 보드 ───────────────────────────────────────────────────
   board: _initialBoard(),
   cursor: { x: 2, y: 8 },
 
-  // 게임 플로우
+  // ── 게임 플로우 ────────────────────────────────────────────
   gameOver: false,
   gameStarted: false,
   suspendGame: false,
 
-  // 애니메이션
+  // ── 애니메이션 ─────────────────────────────────────────────
   animatingSwap: { active: false },
   removing: [],
 
-  // 타이머 핸들
+  // ── 타이머 핸들 ────────────────────────────────────────────
   removalTimer: null,
   gravityTimer: null,
   riseTimer: null,
@@ -30,7 +39,7 @@ export const state = {
   // 중력 복원용 플래그
   gravityWasActive: false,
 
-  // 점수 / 진행
+  // ── 점수 / 진행 ────────────────────────────────────────────
   score: 0,
   combo: 0,
   highscore: 0,
@@ -38,7 +47,8 @@ export const state = {
   riseInterval: BASE_RISE_INTERVAL,
 };
 
-/** 상태를 초기값으로 완전 리셋 (resetGame에서 사용) */
+/** 상태를 초기값으로 완전 리셋 (resetGame에서 사용)
+ *  screen, leaderboard, highscore, menuCursor 는 유지 */
 export function resetState() {
   state.board = _initialBoard();
   state.cursor = { x: 2, y: 8 };
@@ -68,5 +78,34 @@ export function resetState() {
   state.combo = 0;
   state.level = 0;
   state.riseInterval = BASE_RISE_INTERVAL;
-  // highscore는 유지
+  // highscore, leaderboard, screen, menuCursor 는 유지
+}
+
+/** 리더보드를 localStorage에 저장 */
+export function saveLeaderboard() {
+  try {
+    localStorage.setItem(
+      "swipe-pong-leaderboard",
+      JSON.stringify(state.leaderboard),
+    );
+  } catch (e) {
+    console.warn("saveLeaderboard failed", e);
+  }
+}
+
+/** localStorage에서 리더보드를 읽어 state.leaderboard에 적용 */
+export function loadLeaderboard() {
+  try {
+    const raw = localStorage.getItem("swipe-pong-leaderboard");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        state.leaderboard = parsed.slice(0, 10);
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn("loadLeaderboard failed", e);
+  }
+  state.leaderboard = [];
 }

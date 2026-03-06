@@ -4,7 +4,12 @@
    ============================================================ */
 import { state } from "./state.js";
 import { CELL_SIZE, GAP_SIZE, PADDING } from "./constants.js";
-import { renderBoardToCanvas } from "./renderer.js";
+import {
+  renderBoardToCanvas,
+  renderTitleScreen,
+  renderLeaderboard,
+  renderSettingsBackground,
+} from "./renderer.js";
 
 /* ── DOM 참조 (initDom() 후 사용 가능) ─────────────────── */
 export const dom = {
@@ -22,7 +27,15 @@ export const dom = {
   settingsBack: null,
   bgmVol: null,
   sfxVol: null,
-  startBtn: null,
+  startBtn: null, // 코엠트 신규
+  leaderboardPanel: null,
+  leaderboardList: null,
+  finalScoreEl: null,
+  nameInput: null,
+  submitScoreBtn: null,
+  retryBtn: null,
+  titleFromGameoverBtn: null,
+  leaderboardBack: null,
 };
 
 export function initDom() {
@@ -41,13 +54,108 @@ export function initDom() {
   dom.bgmVol = document.getElementById("bgmVol");
   dom.sfxVol = document.getElementById("sfxVol");
   dom.startBtn = document.getElementById("start");
+  // 신규
+  dom.leaderboardPanel = document.getElementById("leaderboardPanel");
+  dom.leaderboardList = document.getElementById("leaderboardList");
+  dom.finalScoreEl = document.getElementById("finalScore");
+  dom.nameInput = document.getElementById("nameInput");
+  dom.submitScoreBtn = document.getElementById("submitScoreBtn");
+  dom.retryBtn = document.getElementById("retryBtn");
+  dom.titleFromGameoverBtn = document.getElementById("titleFromGameoverBtn");
+  dom.leaderboardBack = document.getElementById("leaderboardBack");
+}
+
+/* ─────────────────────────────────────────────────────────────
+   화면 전환 — showScreen(name)
+───────────────────────────────────────────────────────────── */
+/**
+ * state.screen을 동기화하고 해당 화면의 HTML 패널만 표시한다.
+ * 캔버스 실제 그리기는 render()가 담당한다.
+ * @param {'title'|'game'|'gameover'|'leaderboard'|'settings'} name
+ */
+export function showScreen(name) {
+  state.screen = name;
+
+  const isGameplay = name === "game" || name === "gameover";
+
+  // 스코어보드: 플레이 중에만 표시
+  if (dom.scoreboardEl)
+    dom.scoreboardEl.style.display = isGameplay ? "" : "none";
+
+  // 메뉴 버튼: 게임 중에만 표시
+  if (dom.menuBtnEl)
+    dom.menuBtnEl.style.display = name === "game" ? "" : "none";
+
+  // Start 버튼은 타이틀 메뉴로 대체되었으므로 항상 숨김
+  if (dom.startBtn) dom.startBtn.style.display = "none";
+
+  // 리더보드 패널
+  if (dom.leaderboardPanel) {
+    dom.leaderboardPanel.hidden = name !== "leaderboard";
+    if (name === "leaderboard") renderLeaderboardPanel();
+  }
+
+  // 세팅 패널
+  if (dom.settingsPanel) dom.settingsPanel.hidden = name !== "settings";
+
+  // 게임오버 오버레이
+  if (dom.gameOverEl) {
+    if (name === "gameover") {
+      dom.gameOverEl.style.display = "flex";
+      if (dom.finalScoreEl) dom.finalScoreEl.textContent = String(state.score);
+      if (dom.nameInput) {
+        dom.nameInput.value = "";
+        setTimeout(() => dom.nameInput && dom.nameInput.focus(), 80);
+      }
+    } else {
+      dom.gameOverEl.style.display = "none";
+    }
+  }
+
+  // 퍼즈 모달은 전환 시 항상 닫음
+  if (dom.pauseModalEl) dom.pauseModalEl.style.display = "none";
+}
+
+/* ─────────────────────────────────────────────────────────────
+   리더보드 리스트 DOM 갱신
+───────────────────────────────────────────────────────────── */
+/** state.leaderboard를 HTML ol에 반영 (화면이 숨겨져 있어도 갱신 가능) */
+export function renderLeaderboardPanel() {
+  if (!dom.leaderboardList) return;
+  const medals = ["🥇", "🥈", "🥉"];
+  dom.leaderboardList.innerHTML = state.leaderboard
+    .slice(0, 10)
+    .map(
+      (e, i) =>
+        `<li class="lb-row rank-${i + 1}">
+          <span class="lb-rank">${medals[i] ?? i + 1}</span>
+          <span class="lb-name">${e.name || "???"}</span>
+          <span class="lb-score">${e.score}</span>
+          <span class="lb-date">${e.date || ""}</span>
+        </li>`,
+    )
+    .join("");
 }
 
 /* ─────────────────────────────────────────────────────────────
    메인 렌더 함수
 ───────────────────────────────────────────────────────────── */
 export function render() {
-  // 캔버스 렌더
+  // 화면별 캔버스 렌더
+  if (state.screen === "title") {
+    renderTitleScreen(state.menuCursor);
+    return;
+  }
+  if (state.screen === "leaderboard") {
+    renderLeaderboard(state.leaderboard);
+    return;
+  }
+  if (state.screen === "settings") {
+    renderSettingsBackground();
+    return;
+  }
+
+  // game / gameover: 보드 캔버스 렌더
   renderBoardToCanvas(
     state.board,
     state.cursor,
@@ -55,60 +163,7 @@ export function render() {
     state.animatingSwap,
   );
 
-  // DOM 에러 오버레이용 try/catch
-  try {
-    if (dom.boardEl) dom.boardEl.innerHTML = "";
-  } catch (err) {
-    console.error("render error", err);
-    if (dom.gameOverEl) {
-      dom.gameOverEl.style.display = "flex";
-      dom.gameOverEl.textContent =
-        "ERROR: " + (err && err.message ? err.message : String(err));
-    }
-    return;
-  }
-
-  // 스왑 애니메이션 플로팅 오버레이
-  if (state.animatingSwap && state.animatingSwap.active && dom.boardEl) {
-    const sa = state.animatingSwap;
-    const a = document.createElement("div");
-    a.className = `floating ${sa.aColor || ""}`;
-    const aLeft = (sa.curA && sa.curA.left) || sa.leftA || 0;
-    const aTop = (sa.curA && sa.curA.top) || sa.topA || 0;
-    a.style.left = aLeft + "px";
-    a.style.top = aTop + "px";
-    a.style.zIndex = "10";
-    dom.boardEl.appendChild(a);
-
-    const b = document.createElement("div");
-    b.className = `floating ${sa.bColor || ""}`;
-    const bLeft = (sa.curB && sa.curB.left) || sa.leftB || 0;
-    const bTop = (sa.curB && sa.curB.top) || sa.topB || 0;
-    b.style.left = bLeft + "px";
-    b.style.top = bTop + "px";
-    b.style.zIndex = "11";
-    dom.boardEl.appendChild(b);
-  }
-
-  // 게임오버 오버레이
-  if (dom.gameOverEl)
-    dom.gameOverEl.style.display = state.gameOver ? "flex" : "none";
-
-  // Start / Restart 버튼 표시
-  if (dom.startBtn) {
-    if (state.gameOver) {
-      dom.startBtn.style.display = "inline-block";
-      dom.startBtn.textContent = "Restart";
-    } else if (!state.gameStarted) {
-      dom.startBtn.style.display = "inline-block";
-      dom.startBtn.textContent = "Start";
-    } else {
-      dom.startBtn.style.display = "none";
-      dom.startBtn.textContent = "Start";
-    }
-  }
-
-  // 점수 UI
+  // HUD DOM 갱신 (게임 플레이 중에만)
   const scoreEl = document.getElementById("score-value");
   if (scoreEl) scoreEl.textContent = String(state.score);
   const hsEl = document.getElementById("highscore-value");

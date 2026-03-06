@@ -1,7 +1,7 @@
 /* ============================================================
    game-lifecycle.js — 게임 시작·리셋·상승·레벨 관리
    ============================================================ */
-import { state, resetState } from "./state.js";
+import { state, resetState, saveLeaderboard } from "./state.js";
 import { W, H } from "./constants.js";
 import {
   generateSafeRow,
@@ -18,7 +18,7 @@ import {
   playBgmWebAudio,
   stopBgmWebAudio,
 } from "./audio.js";
-import { render, dom } from "./ui.js";
+import { render, dom, showScreen } from "./ui.js";
 
 /* main.js에서 initLifecycle() 후 사용 가능 */
 
@@ -41,7 +41,7 @@ export function doRise() {
       const el = getBgmEl();
       if (el) el.pause();
     }
-    render();
+    showScreen("gameover");
     return;
   }
 
@@ -61,7 +61,7 @@ export function startGame() {
   if (state.gameStarted) return;
   state.gameStarted = true;
 
-  if (dom.startBtn) dom.startBtn.style.display = "none";
+  showScreen("game");
   state.gameOver = false;
 
   // BGM 재생 (유저 제스처 내 호출)
@@ -104,6 +104,70 @@ export function startGame() {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   goToTitle — BGM 정지 후 타이틀 화면으로
+───────────────────────────────────────────────────────────── */
+export function goToTitle() {
+  if (state.riseTimer) {
+    clearInterval(state.riseTimer);
+    state.riseTimer = null;
+  }
+  if (state.gravityTimer) {
+    clearInterval(state.gravityTimer);
+    state.gravityTimer = null;
+  }
+  if (getSupportsWebAudio()) stopBgmWebAudio({ fadeOut: 0.2 });
+  else {
+    const el = getBgmEl();
+    if (el) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch (e) {}
+    }
+  }
+  resetState();
+  showScreen("title");
+}
+
+/* ─────────────────────────────────────────────────────────────
+   submitScore — 리더보드에 이름/점수 등록
+───────────────────────────────────────────────────────────── */
+/**
+ * @param {string} rawName  입력한 이름 (3자 이네음)
+ * @param {number} score
+ */
+export function submitScore(rawName, score) {
+  const name =
+    (rawName || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 3) || "AAA";
+
+  const entry = {
+    name,
+    score,
+    date: new Date().toLocaleDateString("ko-KR"),
+  };
+
+  state.leaderboard.push(entry);
+  state.leaderboard.sort((a, b) => b.score - a.score);
+  if (state.leaderboard.length > 10)
+    state.leaderboard = state.leaderboard.slice(0, 10);
+
+  saveLeaderboard();
+
+  // 하이스코어도 동기화
+  if (score > state.highscore) {
+    state.highscore = score;
+    try {
+      localStorage.setItem("swipe-pong-highscore", String(score));
+    } catch (e) {}
+  }
+
+  showScreen("leaderboard");
+}
+
+/* ─────────────────────────────────────────────────────────────
    resetGame
 ───────────────────────────────────────────────────────────── */
 export function resetGame() {
@@ -130,9 +194,6 @@ export function resetGame() {
   if (scoreEl) scoreEl.textContent = "0";
 
   render();
-
-  // 타이틀 화면으로 돌아가기
-  if (dom.startBtn) dom.startBtn.style.display = "inline-block";
 }
 
 /* ─────────────────────────────────────────────────────────────

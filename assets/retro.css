@@ -265,20 +265,79 @@ button:active {
   display: none;
   position: absolute;
   inset: 0;
-  background: rgba(8, 8, 20, 0.88);
-  color: var(--gba-accent2);
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  text-shadow: 0 0 16px rgba(255, 80, 140, 0.7);
+  background: rgba(8, 8, 20, 0.92);
   align-items: center;
   justify-content: center;
   text-align: center;
   border-radius: 2px;
+  z-index: 100;
 }
-#gameover.visible {
+
+.gameover-content {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 20px;
+  background: var(--gba-panel);
+  border: 1px solid var(--gba-border);
+  border-radius: 8px;
+  min-width: 200px;
+  box-shadow:
+    0 0 24px rgba(255, 80, 140, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.gameover-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--gba-accent2);
+  text-shadow: 0 0 14px rgba(255, 80, 140, 0.7);
+  text-transform: uppercase;
+}
+
+.gameover-score {
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--gba-gold);
+  font-weight: 700;
+}
+
+/* 이름 입력 */
+.name-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+.name-entry label {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gba-muted);
+}
+#nameInput {
+  background: var(--gba-empty);
+  border: 1px solid var(--gba-border);
+  border-radius: 4px;
+  color: var(--gba-text);
+  font-family: monospace;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-align: center;
+  text-transform: uppercase;
+  width: 80px;
+  padding: 6px 8px;
+  outline: none;
+}
+#nameInput:focus {
+  border-color: var(--gba-accent);
+  box-shadow: 0 0 8px rgba(112, 112, 255, 0.4);
 }
 
 /* ── 11. 모달 ────────────────────────────────────────────────────────────── */
@@ -351,6 +410,120 @@ input[type="range"] {
   width: 100%;
   accent-color: var(--gba-accent);
   margin: 4px 0 8px;
+}
+
+/* ── 12. 스크린 패널 (leaderboard / settings 오버레이) ───────────────── */
+.screen-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+  background: rgba(8, 8, 20, 0.96);
+  border-radius: 2px;
+  z-index: 90;
+  overflow-y: auto;
+  gap: 10px;
+}
+.screen-panel[hidden] {
+  display: none;
+}
+
+/* 리더보드: 캔버스가 배경 → 패널은 투명, BACK 버튼만 */
+#leaderboardPanel {
+  background: transparent;
+  justify-content: flex-end;
+  padding-bottom: 18px;
+  pointer-events: none; /* 캔버스 클릭/터치 통과 */
+}
+#leaderboardPanel > * {
+  pointer-events: auto;
+}
+
+/* 세팅: 슬라이더 + 레이블 중앙 배치 */
+#settingsPanel {
+  justify-content: center;
+  background: rgba(8, 8, 20, 0.94);
+  gap: 14px;
+  max-width: 100%;
+}
+#settingsPanel input[type="range"] {
+  width: min(260px, 80%);
+}
+#settingsPanel label {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gba-muted);
+  align-self: flex-start;
+  width: min(260px, 80%);
+}
+
+/* 패널 제목 */
+.panel-title {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gba-accent);
+  text-shadow: 0 0 10px rgba(112, 112, 255, 0.6);
+}
+
+/* 리더보드 리스트 */
+#leaderboardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 28px 50px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  background: rgba(112, 112, 255, 0.05);
+  border: 1px solid transparent;
+}
+.lb-row.rank-1 {
+  border-color: rgba(255, 215, 0, 0.35);
+  background: rgba(255, 215, 0, 0.06);
+}
+.lb-row.rank-2 {
+  border-color: rgba(192, 192, 192, 0.25);
+}
+.lb-row.rank-3 {
+  border-color: rgba(205, 127, 50, 0.25);
+}
+.lb-rank {
+  font-size: 1rem;
+  text-align: center;
+}
+.lb-name {
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--gba-text);
+}
+.lb-score {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--gba-gold);
+  text-align: right;
+}
+.lb-date {
+  font-size: 0.65rem;
+  color: var(--gba-muted);
+  text-align: right;
 }
 
 /* ── 12. 반응형 ──────────────────────────────────────────────────────────── */

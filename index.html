@@ -224,7 +224,59 @@
           src="assets/bgm.wav"
           aria-hidden="true"
         ></audio>
-        <div id="gameover">GAME OVER</div>
+        <div id="gameover">
+          <div class="gameover-content">
+            <h2 class="gameover-title">GAME OVER</h2>
+            <p class="gameover-score">SCORE: <span id="finalScore">0</span></p>
+            <div class="name-entry">
+              <label for="nameInput">ENTER NAME (3 CHARS)</label>
+              <input
+                id="nameInput"
+                type="text"
+                maxlength="3"
+                placeholder="AAA"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <button id="submitScoreBtn" class="modal-btn primary">
+              SUBMIT
+            </button>
+            <button id="retryBtn" class="modal-btn">RETRY</button>
+            <button id="titleFromGameoverBtn" class="modal-btn">TITLE</button>
+          </div>
+        </div>
+        <!-- 리더보드 패널 (리스트는 캔버스 렌더, 패널은 BACK 버튼 전용) -->
+        <div id="leaderboardPanel" class="screen-panel" hidden>
+          <button id="leaderboardBack" class="modal-btn">◀ BACK</button>
+        </div>
+
+        <!-- 세팅 패널 (standalone, pauseModal에서 이동) -->
+        <div id="settingsPanel" class="screen-panel" hidden>
+          <h2 class="panel-title">SETTINGS</h2>
+          <label for="bgmVol">BGM VOLUME</label>
+          <input
+            id="bgmVol"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.5"
+            aria-label="BGM volume"
+          />
+          <label for="sfxVol">SFX VOLUME</label>
+          <input
+            id="sfxVol"
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="1"
+            aria-label="SFX volume"
+          />
+          <button id="settingsBack" class="modal-btn">◀ BACK</button>
+        </div>
+
         <div
           id="pauseModal"
           class="modal-overlay"
@@ -249,40 +301,11 @@
               Restart
             </button>
             <button class="modal-btn" id="settingBtn" type="button">
-              Setting
+              Settings
             </button>
             <button class="modal-btn" id="titleBtn" type="button">
               Back to Title
             </button>
-            <div id="settingsPanel" style="display: none; margin-top: 8px">
-              <label for="bgmVol" style="font-size: 12px; opacity: 0.9"
-                >BGM Volume</label
-              >
-              <input
-                id="bgmVol"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="0.5"
-                aria-label="BGM volume"
-              />
-              <label for="sfxVol" style="font-size: 12px; opacity: 0.9"
-                >SFX Volume</label
-              >
-              <input
-                id="sfxVol"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value="1"
-                aria-label="SFX volume"
-              />
-              <button class="modal-btn" id="settingsBack" type="button">
-                Back
-              </button>
-            </div>
           </div>
         </div>
       </div>

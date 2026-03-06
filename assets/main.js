@@ -1,19 +1,22 @@
 /* ============================================================
    main.js — 진입점: 모듈 조립 & 이벤트 등록
    ============================================================ */
-import { state } from "./state.js";
+import { state, loadLeaderboard } from "./state.js";
 import { H } from "./constants.js";
-import { initDom, render, dom } from "./ui.js";
+import { initDom, render, showScreen, dom } from "./ui.js";
 import { initCanvas } from "./renderer.js";
-import { initAudio, suspendAudio, resumeAudio, setBgmVolume } from "./audio.js";
+import { initAudio, suspendAudio, resumeAudio } from "./audio.js";
 import {
   initLifecycle,
   startGame,
   resetGame,
   startRise,
+  goToTitle,
+  submitScore,
 } from "./game-lifecycle.js";
 import { generateSafeRow } from "./game-logic.js";
-import { setupKeyboard, selectCell } from "./input.js";
+import { setupKeyboard, selectCell, confirmTitleMenu } from "./input.js";
+import { applySettings, initSettingsPanel } from "./settings.js";
 
 /* ─────────────────────────────────────────────────────────────
    모달 로컬 상태
@@ -36,8 +39,6 @@ function openMenuModal() {
 
   dom.pauseModalEl.style.display = "flex";
   dom.pauseModalEl.setAttribute("aria-hidden", "false");
-  if (dom.boardEl) dom.boardEl.setAttribute("aria-hidden", "true");
-  if (dom.scoreboardEl) dom.scoreboardEl.setAttribute("aria-hidden", "true");
 
   try {
     lastFocusedBeforeModal = document.activeElement;
@@ -58,9 +59,6 @@ function closeMenuModal() {
   if (menuWasRunningRise) startRise();
   state.suspendGame = false;
 
-  if (dom.boardEl) dom.boardEl.removeAttribute("aria-hidden");
-  if (dom.scoreboardEl) dom.scoreboardEl.removeAttribute("aria-hidden");
-
   try {
     if (
       lastFocusedBeforeModal &&
@@ -70,6 +68,25 @@ function closeMenuModal() {
       lastFocusedBeforeModal = null;
     }
   } catch (e) {}
+}
+
+/* ─────────────────────────────────────────────────────────────
+   타이틀 화면 쾔버스 클릭/터치 콜백
+───────────────────────────────────────────────────────────── */
+function onTitleMenuSelect(index) {
+  state.menuCursor = index;
+  confirmTitleMenu();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   60fps 연속 렌더 루프 (타이틀 애니메이션 포함)
+───────────────────────────────────────────────────────────── */
+function _startRenderLoop() {
+  function loop() {
+    render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -101,81 +118,107 @@ function init() {
     console.warn("localStorage not available", e);
   }
 
-  // 초기 보드 (바닥 4줄 채우기)
-  for (let y = H - 1; y >= Math.max(0, H - 4); y--)
+  // 초기 보드 (바닥 2줄 채우기)
+  for (let y = H - 1; y >= Math.max(0, H - 2); y--)
     state.board[y] = generateSafeRow(y);
+
+  // 리더보드 불러오기
+  loadLeaderboard();
+
+  // 설정 패널 이벤트 등록 & 저장된 볼륨 적용
+  initSettingsPanel();
+  applySettings();
 
   // 버튼 이벤트 등록
   _bindButtons();
 
-  // 볼륨 슬라이더
-  _bindSliders();
+  // 타이틀 화면으로 시작
+  showScreen("title");
 
-  // 초기 렌더
-  render();
+  // 60fps 연속 렌더 루프
+  _startRenderLoop();
 }
 
 /* ─────────────────────────────────────────────────────────────
    버튼 바인딩
 ───────────────────────────────────────────────────────────── */
 function _bindButtons() {
-  // Start / Restart
-  if (dom.startBtn) {
-    dom.startBtn.style.pointerEvents = "auto";
-    dom.startBtn.addEventListener("click", (e) => {
-      console.log("start clicked event", e.type);
-      if (state.gameOver) {
-        resetGame();
-        startGame();
+  // ── 인게임 메뉴 버튼 ───────────────────────────────────────────
+  if (dom.menuBtnEl) dom.menuBtnEl.addEventListener("click", openMenuModal);
+
+  // ── 퍼즈 모달 ────────────────────────────────────────────
+  if (dom.resumeBtn)
+    dom.resumeBtn.addEventListener("click", () => closeMenuModal());
+
+  if (dom.restartBtn)
+    dom.restartBtn.addEventListener("click", () => {
+      closeMenuModal();
+      resetGame();
+      startGame();
+    });
+
+  if (dom.settingBtn)
+    dom.settingBtn.addEventListener("click", () => {
+      closeMenuModal();
+      showScreen("settings");
+    });
+
+  if (dom.titleBtn)
+    dom.titleBtn.addEventListener("click", () => {
+      closeMenuModal();
+      goToTitle();
+    });
+
+  if (dom.modalClose)
+    dom.modalClose.addEventListener("click", () => closeMenuModal());
+
+  // ── 세팅 패널 Back ───────────────────────────────────────────
+  // 타이틀에서 열었으면 → 타이틀로, 게임 중 열었으면 → 퍼즈 모달 복귀
+  if (dom.settingsBack)
+    dom.settingsBack.addEventListener("click", () => {
+      if (state.gameStarted && !state.gameOver) {
+        showScreen("game");
+        openMenuModal();
       } else {
-        startGame();
+        goToTitle();
+      }
+    });
+
+  // ── 리더보드 패널 Back ──────────────────────────────────────
+  if (dom.leaderboardBack)
+    dom.leaderboardBack.addEventListener("click", () => goToTitle());
+
+  // ── 게임오버 오버레이 ───────────────────────────────────────
+  if (dom.submitScoreBtn)
+    dom.submitScoreBtn.addEventListener("click", () => {
+      const name = dom.nameInput ? dom.nameInput.value.trim() : "";
+      submitScore(name, state.score);
+    });
+
+  if (dom.nameInput) {
+    dom.nameInput.addEventListener("keydown", (e) => {
+      e.stopPropagation(); // 게임 키 입력과 충돌 방지
+      if (e.key === "Enter") {
+        const name = dom.nameInput.value.trim();
+        submitScore(name, state.score);
       }
     });
   }
 
-  // Menu
-  if (dom.menuBtnEl) dom.menuBtnEl.addEventListener("click", openMenuModal);
-
-  // Modal 내부 버튼
-  if (dom.resumeBtn)
-    dom.resumeBtn.addEventListener("click", () => closeMenuModal());
-  if (dom.restartBtn)
-    dom.restartBtn.addEventListener("click", () => {
-      dom.pauseModalEl.style.display = "none";
-      state.suspendGame = false;
+  if (dom.retryBtn)
+    dom.retryBtn.addEventListener("click", () => {
       resetGame();
       startGame();
     });
-  if (dom.settingBtn)
-    dom.settingBtn.addEventListener("click", () => {
-      if (dom.settingsPanel) dom.settingsPanel.style.display = "block";
-    });
-  if (dom.settingsBack)
-    dom.settingsBack.addEventListener("click", () => {
-      if (dom.settingsPanel) dom.settingsPanel.style.display = "none";
-    });
-  if (dom.titleBtn)
-    dom.titleBtn.addEventListener("click", () => {
-      if (dom.pauseModalEl) dom.pauseModalEl.style.display = "none";
-      state.suspendGame = false;
-      resetGame();
-    });
-  if (dom.modalClose)
-    dom.modalClose.addEventListener("click", () => closeMenuModal());
-}
 
-/* ─────────────────────────────────────────────────────────────
-   볼륨 슬라이더 바인딩
-───────────────────────────────────────────────────────────── */
-function _bindSliders() {
-  if (dom.bgmVol) {
-    dom.bgmVol.addEventListener("input", (e) => {
-      setBgmVolume(parseFloat(e.target.value));
-    });
-  }
-  if (dom.sfxVol) {
-    dom.sfxVol.addEventListener("input", (e) => {
-      window.__SFX_USER_MULT = parseFloat(e.target.value);
+  if (dom.titleFromGameoverBtn)
+    dom.titleFromGameoverBtn.addEventListener("click", () => goToTitle());
+
+  // ── Start 버튼 (타이틀로 대체, 임시 호환) ───────────────────
+  if (dom.startBtn) {
+    dom.startBtn.style.display = "none";
+    dom.startBtn.addEventListener("click", () => {
+      if (state.screen === "title") startGame();
     });
   }
 }

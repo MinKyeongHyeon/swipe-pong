@@ -134,3 +134,256 @@ startRenderLoop(getState)
 python3 -m http.server 8000
 # 브라우저에서 http://localhost:8000 접속
 ```
+
+---
+
+---
+
+# Plan: 타이틀 메뉴 시스템
+
+> TL;DR — 게임 진입점을 "타이틀 화면"으로 격상한다.
+> 타이틀에서 **Start / Leaderboard / Settings** 세 화면으로 진입 가능하며,
+> 모든 화면 전환은 `state.screen` 단일 값으로 제어한다.
+> Canvas 렌더러를 화면 단위로 확장하고, 현재 pauseModal의 Settings 패널을
+> 독립 모듈로 분리해 재사용한다.
+
+---
+
+## 현재 코드 분석 및 재활용 계획
+
+| 기존 요소                                | 현재 위치                          | 재활용 방식                                                                                     |
+| ---------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `state.gameStarted` / `state.gameOver`   | `state.js`                         | `state.screen` enum으로 통합 (`'title'`\|`'game'`\|`'gameover'`\|`'leaderboard'`\|`'settings'`) |
+| `state.highscore`                        | `state.js`                         | `state.leaderboard[]` 배열로 확장 (`{rank, name, score, date}`)                                 |
+| `resetState()`                           | `state.js`                         | leaderboard·screen은 리셋 제외 대상으로 명시                                                    |
+| pauseModal의 BGM/SFX 슬라이더            | `index.html` + `ui.js` + `main.js` | `settings.js` 모듈로 추출 → 타이틀 Settings·게임 중 설정 양쪽에서 호출                          |
+| `initCanvas()` / `renderBoardToCanvas()` | `renderer.js`                      | 화면별 렌더 함수 추가 (`renderTitleScreen`, `renderLeaderboard`, `renderSettingsScreen`)        |
+| `dom.titleBtn` (pauseModal 내)           | `ui.js`                            | 타이틀로 돌아가는 기존 버튼 → `goToTitle()` 공통 함수로 연결                                    |
+| `setupKeyboard()`                        | `input.js`                         | screen-aware 분기 추가 (타이틀에서 ↑↓ 메뉴 이동, Enter 선택)                                    |
+| `startGame()` / `resetGame()`            | `game-lifecycle.js`                | `goToTitle()` 함수 추가, `startGame` 내부에서 `state.screen = 'game'` 설정                      |
+
+---
+
+## 새로운 화면 전환 흐름
+
+```
+[앱 로드]
+    │
+    ▼
+[TITLE 화면]
+  ├─ Start ──────────────▶ [GAME 화면]
+  │                              │
+  │                         game over
+  │                              │
+  │                              ▼
+  │                        [GAMEOVER 화면]
+  │                         ├─ Retry ──▶ [GAME 화면]
+  │                         └─ Title ──▶ [TITLE 화면]
+  │
+  ├─ Leaderboard ────────▶ [LEADERBOARD 화면]
+  │                              └─ Back ──▶ [TITLE 화면]
+  │
+  └─ Settings ───────────▶ [SETTINGS 화면]
+                                 └─ Back ──▶ [TITLE 화면]
+```
+
+---
+
+## Steps
+
+### 1. `state.js` 확장
+
+- `state.screen` 필드 추가, 초기값 `'title'`
+- `state.highscore` → `state.leaderboard: []` 배열로 교체
+  - 항목: `{ name: string, score: number, date: string }`
+  - 최대 10개, 삽입 시 정렬 유지
+- `resetState()` 수정: `screen`, `leaderboard`는 초기화 제외
+- `saveLeaderboard()` / `loadLeaderboard()` 헬퍼 추가
+  - `localStorage key: 'swipe-pong-leaderboard'`
+
+```js
+// 추가 예시
+export const state = {
+  ...
+  screen: 'title',          // 'title'|'game'|'gameover'|'leaderboard'|'settings'
+  leaderboard: [],           // [{ name, score, date }] 최대 10개
+  menuCursor: 0,             // 타이틀 메뉴 커서 (0=Start, 1=Leaderboard, 2=Settings)
+};
+```
+
+### 2. `settings.js` 신규 모듈 추출
+
+현재 `main.js`와 `index.html`에 흩어진 BGM/SFX 슬라이더 로직을 분리한다.
+
+```
+settings.js
+  ├─ getSettings()        → { bgmVol, sfxVol } (localStorage 로드)
+  ├─ saveSettings(opts)   → localStorage 저장
+  ├─ applySettings()      → 오디오 볼륨 적용
+  └─ initSettingsPanel()  → DOM 이벤트 등록 (재사용 가능한 초기화)
+```
+
+- `main.js`에서 `initSettingsPanel()` 호출 제거 후 `settings.js` import로 대체
+- pauseModal과 Settings 화면 모두 동일 함수 호출
+
+### 3. `renderer.js` 화면별 렌더 함수 추가
+
+기존 `renderBoardToCanvas()` 는 유지하고, 아래 함수를 추가한다.
+
+```js
+// 타이틀 화면 전체를 canvas에 그린다
+export function renderTitleScreen(menuCursor)
+  // 로고 텍스트 (큰 픽셀 폰트 스타일로 fillText)
+  // 메뉴 아이템 3개: Start / Leaderboard / Settings
+  // 커서 위치에 ▶ 아이콘 + 글로우 효과
+  // 하단에 버전·크레딧 소문자 텍스트
+
+// 리더보드 화면
+export function renderLeaderboard(leaderboard)
+  // 상위 10개 점수 목록
+  // 1~3위는 골드/실버/브론즈 컬러
+
+// 설정 화면 (볼륨 슬라이더는 HTML 오버레이 사용, canvas는 배경만)
+export function renderSettingsBackground()
+```
+
+- 렌더 루프(`startRenderLoop`)에서 `state.screen` 분기
+  ```js
+  if (state.screen === 'title')      renderTitleScreen(state.menuCursor);
+  else if (state.screen === 'game')  renderBoardToCanvas(...);
+  else if (state.screen === 'leaderboard') renderLeaderboard(state.leaderboard);
+  ...
+  ```
+
+### 4. HTML 오버레이 패널 구성 (`index.html`)
+
+Canvas가 배경을 담당하고, 대화형 UI(버튼·슬라이더 등)는 절대 위치 HTML 오버레이로 처리한다.
+
+```html
+<!-- 타이틀 화면: canvas만으로 처리 (키/터치 입력) -->
+
+<!-- 리더보드 패널: canvas 위 오버레이 -->
+<div id="leaderboardPanel" class="screen-panel" hidden>
+  <ol id="leaderboardList"></ol>
+  <button id="leaderboardBack">BACK</button>
+</div>
+
+<!-- 설정 패널: 기존 settingsPanel 재사용 + screen 연동 -->
+<div id="settingsPanel" class="screen-panel" hidden>
+  <!-- 기존 bgmVol, sfxVol 슬라이더 그대로 -->
+  <button id="settingsBack">BACK</button>
+</div>
+
+<!-- 게임 오버 오버레이: 기존 gameover div 확장 -->
+<div id="gameover" hidden>
+  <p id="finalScore"></p>
+  <input id="nameInput" placeholder="NAME" maxlength="3" />
+  <!-- 이니셜 입력 -->
+  <button id="retryBtn">RETRY</button>
+  <button id="titleBtn">TITLE</button>
+</div>
+```
+
+- 기존 `pauseModal`의 Settings 항목은 `settingsPanel`로 통합, pauseModal은 Pause 전용으로 단순화
+
+### 5. `ui.js` 업데이트
+
+- `dom` 객체에 신규 요소 추가: `leaderboardPanel`, `leaderboardList`, `nameInput`, `retryBtn`
+- `showScreen(name)` 헬퍼 함수 추가
+  - 모든 패널 숨기고 해당 screen 패널만 표시
+  - `state.screen = name` 동기화
+- `renderLeaderboardPanel()` 함수 추가: `state.leaderboard`를 `<li>` 목록으로 DOM에 반영
+
+### 6. `game-lifecycle.js` 업데이트
+
+- `goToTitle()` 함수 추가
+  - BGM 정지, 타이머 전부 클리어, `resetState()`, `state.screen = 'title'`
+- `gameOver` 트리거 시 이니셜 입력 → `submitScore(name, score)` 호출 후 leaderboard 갱신
+- `startGame()` 내 `state.gameStarted = true` 앞에 `state.screen = 'game'` 설정
+
+### 7. `input.js` screen-aware 분기 추가
+
+```js
+// 타이틀 화면 키 입력
+if (state.screen === "title") {
+  if (key === "ArrowUp") state.menuCursor = (state.menuCursor + 2) % 3;
+  if (key === "ArrowDown") state.menuCursor = (state.menuCursor + 1) % 3;
+  if (key === "Enter" || key === " ") confirmTitleMenu();
+  return; // 게임 입력 차단
+}
+```
+
+- 터치/클릭: canvas 좌표 → 메뉴 아이템 히트 테스트 (타이틀 화면 한정)
+
+### 8. `main.js` 흐름 정리
+
+- 앱 로드 시 `state.screen = 'title'`로 시작 (startBtn 클릭 제거)
+- `dom.startBtn` 삭제 → 타이틀 화면 Enter/클릭으로 대체
+- 리더보드/설정 Back 버튼 이벤트 → `goToTitle()` 연결
+- 게임오버 이니셜 입력 → `submitScore()` → 리더보드 화면 전환
+
+---
+
+## 주요 변경 파일 요약
+
+| 파일                       | 변경 유형 | 핵심 내용                                                                                 |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------- |
+| `assets/state.js`          | 수정      | `screen`, `leaderboard`, `menuCursor` 추가; `saveLeaderboard`/`loadLeaderboard`           |
+| `assets/settings.js`       | **신규**  | BGM/SFX 설정 로직 분리·재사용 가능화                                                      |
+| `assets/renderer.js`       | 수정      | `renderTitleScreen`, `renderLeaderboard`, `renderSettingsBackground` 추가; 렌더 루프 분기 |
+| `assets/ui.js`             | 수정      | `showScreen()`, `renderLeaderboardPanel()`, 신규 dom 참조 추가                            |
+| `assets/game-lifecycle.js` | 수정      | `goToTitle()`, `submitScore()` 추가; screen 전환 연동                                     |
+| `assets/input.js`          | 수정      | 타이틀 화면 키보드·터치 분기 추가                                                         |
+| `assets/main.js`           | 수정      | startBtn 로직 제거; 신규 이벤트 등록; leaderboard 로드                                    |
+| `index.html`               | 수정      | leaderboardPanel, nameInput, retryBtn 추가; settingsPanel 통합                            |
+
+---
+
+## Verification 체크리스트
+
+- [ ] 앱 로드 시 타이틀 화면이 Canvas에 렌더되는가
+- [ ] ↑↓ 키와 터치로 메뉴 커서가 이동하는가
+- [ ] Start → 게임 시작, BGM 재생 정상 동작
+- [ ] 게임오버 시 이니셜 입력 → 리더보드에 저장·표시
+- [ ] Leaderboard 화면: 상위 10개 점수 순서 정확
+- [ ] Settings 화면: 볼륨 변경이 즉시 오디오에 반영, 새로고침 후 유지
+- [ ] pauseModal → Settings와 타이틀 Settings가 동일 설정 공유
+- [ ] 타이틀 → 게임 → 게임오버 → Retry / Title 전환 모두 정상
+
+---
+
+---
+
+# 상용 게임 수준을 위한 기능 제안
+
+> 현재 코드베이스 위에서 단계적으로 추가할 수 있는 기능들을 우선순위별로 정리한다.
+
+## Tier 1 — 즉각적인 몰입감 향상 (난이도 낮음)
+
+| 기능                     | 설명                                                       | 연관 파일                          |
+| ------------------------ | ---------------------------------------------------------- | ---------------------------------- |
+| **히트 사운드 다양화**   | 콤보 단계별 SFX 피치 변화 (콤보 2x → +1 반음)              | `audio.js`                         |
+| **화면 쉐이크**          | 큰 콤보 발생 시 canvas translate 진동                      | `renderer.js`                      |
+| **파티클 이펙트**        | 타일 제거 시 색상 파편이 흩어지는 캔버스 파티클            | `renderer.js` 신규 `particles.js`  |
+| **콤보 팝업 애니메이션** | 현재 텍스트 표시를 캔버스 내 스케일-업 애니메이션으로 교체 | `renderer.js`                      |
+| **레벨업 연출**          | 레벨 상승 시 화면 전체 플래시 + 레벨 텍스트 오버레이       | `renderer.js`, `game-lifecycle.js` |
+
+## Tier 2 — 게임플레이 깊이 (중간 난이도)
+
+| 기능                        | 설명                                                                             | 연관 파일                       |
+| --------------------------- | -------------------------------------------------------------------------------- | ------------------------------- |
+| **스킬 / 아이템 시스템**    | 일정 콤보 달성 시 "폭탄(한 줄 제거)", "슬로우(상승 속도 절반)" 등 특수 타일 등장 | `game-logic.js`, `state.js`     |
+| **위험 경고 연출**          | 최상단 2행에 타일이 찰 경우 테두리 붉게 펄스 + 경고음                            | `renderer.js`, `audio.js`       |
+| **난이도 선택**             | 타이틀 Start 클릭 후 Easy / Normal / Hard 선택 (상승 속도, 초기 행 수 조절)      | `state.js`, `game-lifecycle.js` |
+| **대전 모드 (로컬 2P)**     | 같은 화면에서 키보드 좌우 분할 입력, 콤보 발생 시 상대방 보드에 방해 블록 추가   | 신규 `pvp.js`, `state.js` 확장  |
+| **목표 기반 스테이지 모드** | "100점 내에 3콤보 이상 5회" 등 조건 달성 시 다음 스테이지 진출                   | 신규 `stages.js`                |
+
+## Tier 3 — 리텐션 & 소셜 (높은 난이도 / 장기 로드맵)
+
+| 기능                | 설명                                                       | 연관 파일                      |
+| ------------------- | ---------------------------------------------------------- | ------------------------------ |
+| **온라인 리더보드** | Firebase Realtime DB / Supabase 연동, 전 세계 랭킹 조회    | 신규 `leaderboard-api.js`      |
+| **일일 챌린지**     | 매일 바뀌는 고정 시드 보드, 전 세계 동일 조건 경쟁         | 신규 `daily.js`, 시드 기반 RNG |
+| **업적 시스템**     | "첫 5콤보", "레벨 10 도달" 등 뱃지 수집, localStorage 저장 | 신규 `achievements.js`         |
+| **리플레이 공유**   | 입력 시퀀스를 JSON으로 저장, URL 쿼리스트링으로 공유·재생  | 신규 `replay.js`               |
+| **커스텀 팔레트**   | Settings에서 색상 테마 선택 (GameBoy / GBA / Neon / Mono)  | `renderer.js`, `settings.js`   |

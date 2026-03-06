@@ -4,6 +4,8 @@
    ============================================================ */
 "use strict";
 
+import { state } from "./state.js";
+
 /* ── 상수 ─────────────────────────────────────────────────── */
 const CELL_SIZE = 40;
 const COLS = 6;
@@ -57,6 +59,13 @@ const TILE_COLORS = {
   },
 };
 
+/* ── 타이틀 메뉴 레이아웃 상수 ──────────────────────────── */
+/** 각 메뉴 아이템 중심 Y 좌표 (logical px) */
+const TITLE_MENU_Y = [248, 300, 352];
+/** 메뉴 아이템 히트 영역 높이 */
+const TITLE_MENU_ITEM_H = 48;
+const TITLE_MENU_LABELS = ["START", "LEADERBOARD", "SETTINGS"];
+
 /* ── 내부 상태 ───────────────────────────────────────────── */
 let canvas = null;
 let ctx = null;
@@ -70,9 +79,11 @@ let _frame = 0;
 ───────────────────────────────────────────────────────────── */
 /**
  * @param {function(number, number): void} onCellSelect
- *   캔버스 클릭/터치 시 호출될 콜백 (row, col)
+ *   게임 화면 캔버스 클릭/터치 시 호출될 콜백 (row, col)
+ * @param {function(number): void} [onTitleMenuSelect]
+ *   타이틀 화면 메뉴 아이템 클릭/터치 시 호출될 콜백 (menuIndex)
  */
-export function initCanvas(onCellSelect) {
+export function initCanvas(onCellSelect, onTitleMenuSelect) {
   canvas = document.getElementById("game-canvas");
 
   if (!canvas) {
@@ -114,7 +125,7 @@ export function initCanvas(onCellSelect) {
   ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = false;
 
-  _attachInputAdapter(onCellSelect);
+  _attachInputAdapter(onCellSelect, onTitleMenuSelect);
 
   console.log("[renderer] GBA canvas initialized", logW, "x", logH);
 }
@@ -229,8 +240,213 @@ export function renderBoardToCanvas(board, cursor, removing, swapAnim) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   내부 헬퍼
+   타이틀 화면 렌더
 ───────────────────────────────────────────────────────────── */
+export function renderTitleScreen(menuCursor) {
+  if (!ctx) return;
+  _frame++;
+
+  // 배경
+  ctx.fillStyle = PAL.bg;
+  ctx.fillRect(0, 0, logW, logH);
+
+  // 스캔라인 효과
+  ctx.fillStyle = "rgba(112,112,255,0.04)";
+  for (let y = 0; y < logH; y += 4) ctx.fillRect(0, y, logW, 2);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // 로고 — "PANEL"
+  ctx.font = "bold 38px monospace";
+  ctx.fillStyle = PAL.text;
+  ctx.shadowColor = "rgba(112,112,255,0.85)";
+  ctx.shadowBlur = 14;
+  ctx.fillText("PANEL", logW / 2, 76);
+
+  // 로고 — "PUZZLE"
+  ctx.font = "bold 28px monospace";
+  ctx.fillStyle = "#7070ff";
+  ctx.shadowColor = "rgba(112,112,255,0.9)";
+  ctx.shadowBlur = 12;
+  ctx.fillText("PUZZLE", logW / 2, 116);
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+
+  // 구분선
+  ctx.strokeStyle = "rgba(112,112,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(24, 142);
+  ctx.lineTo(logW - 24, 142);
+  ctx.stroke();
+
+  // 버전
+  ctx.font = "10px monospace";
+  ctx.fillStyle = "#8888bb";
+  ctx.fillText("v1.0  —  SWIPE EDITION", logW / 2, 158);
+
+  // 메뉴 아이템
+  for (let i = 0; i < TITLE_MENU_LABELS.length; i++) {
+    const cy = TITLE_MENU_Y[i];
+    const isSelected = i === (menuCursor || 0);
+    const pulse = 0.5 + 0.5 * Math.sin(_frame * 0.12);
+
+    if (isSelected) {
+      // 선택된 항목 배경 하이라이트
+      ctx.fillStyle = `rgba(112,112,255,${0.1 + 0.07 * pulse})`;
+      ctx.fillRect(PAD + 2, cy - 20, logW - (PAD + 2) * 2, 40);
+      ctx.strokeStyle = `rgba(112,112,255,${0.55 + 0.4 * pulse})`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(PAD + 2, cy - 20, logW - (PAD + 2) * 2, 40);
+
+      // 커서 ▶
+      ctx.font = "14px monospace";
+      ctx.fillStyle = "#7070ff";
+      ctx.textAlign = "left";
+      ctx.fillText("▶", PAD + 10, cy);
+    }
+
+    ctx.font = isSelected ? "bold 17px monospace" : "14px monospace";
+    ctx.fillStyle = isSelected ? PAL.text : "#8888bb";
+    ctx.textAlign = "center";
+    ctx.fillText(TITLE_MENU_LABELS[i], logW / 2 + 8, cy);
+  }
+
+  // 하단 힌트
+  const hintAlpha = 0.45 + 0.25 * Math.sin(_frame * 0.07);
+  ctx.font = "9px monospace";
+  ctx.fillStyle = `rgba(136,136,187,${hintAlpha})`;
+  ctx.textAlign = "center";
+  ctx.fillText("↑↓  MOVE     ENTER / TAP  SELECT", logW / 2, logH - 18);
+
+  _applyDotOverlay();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   리더보드 화면 렌더
+───────────────────────────────────────────────────────────── */
+export function renderLeaderboard(entries) {
+  if (!ctx) return;
+  _frame++;
+
+  ctx.fillStyle = PAL.bg;
+  ctx.fillRect(0, 0, logW, logH);
+
+  ctx.fillStyle = "rgba(112,112,255,0.04)";
+  for (let y = 0; y < logH; y += 4) ctx.fillRect(0, y, logW, 2);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  // 타이틀
+  ctx.font = "bold 18px monospace";
+  ctx.fillStyle = "#ffd700";
+  ctx.shadowColor = "rgba(255,215,0,0.6)";
+  ctx.shadowBlur = 8;
+  ctx.fillText("LEADERBOARD", logW / 2, 30);
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+
+  // 구분선
+  ctx.strokeStyle = "rgba(255,215,0,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, 48);
+  ctx.lineTo(logW - PAD, 48);
+  ctx.stroke();
+
+  // 컬럼 헤더
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "#8888bb";
+  ctx.textAlign = "left";
+  ctx.fillText("#", PAD + 4, 62);
+  ctx.fillText("NAME", PAD + 22, 62);
+  ctx.fillText("SCORE", PAD + 72, 62);
+  ctx.textAlign = "right";
+  ctx.fillText("DATE", logW - PAD - 4, 62);
+
+  if (!entries || entries.length === 0) {
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "#8888bb";
+    ctx.textAlign = "center";
+    ctx.fillText("NO RECORDS YET", logW / 2, logH / 2);
+  } else {
+    const rankColors = ["#ffd700", "#c0c0c0", "#cd7f32"];
+    for (let i = 0; i < Math.min(entries.length, 10); i++) {
+      const e = entries[i];
+      const ey = 80 + i * 38;
+      const rankColor = i < 3 ? rankColors[i] : "#8888bb";
+
+      // 줄 배경
+      ctx.fillStyle = i % 2 === 0 ? "rgba(112,112,255,0.05)" : "transparent";
+      ctx.fillRect(PAD, ey - 14, logW - PAD * 2, 30);
+
+      // 순위
+      ctx.font = i < 3 ? "bold 12px monospace" : "11px monospace";
+      ctx.fillStyle = rankColor;
+      ctx.textAlign = "left";
+      ctx.fillText(String(i + 1), PAD + 4, ey);
+
+      // 이름
+      ctx.fillStyle = i < 3 ? PAL.text : "#aaaacc";
+      ctx.font = "12px monospace";
+      ctx.fillText(e.name || "???", PAD + 22, ey);
+
+      // 점수
+      ctx.fillStyle = rankColor;
+      ctx.font = i < 3 ? "bold 12px monospace" : "11px monospace";
+      ctx.fillText(String(e.score), PAD + 72, ey);
+
+      // 날짜
+      ctx.font = "9px monospace";
+      ctx.fillStyle = "#8888bb";
+      ctx.textAlign = "right";
+      ctx.fillText(e.date || "", logW - PAD - 4, ey);
+    }
+  }
+
+  // 하단 힌트
+  ctx.font = "9px monospace";
+  ctx.fillStyle = "rgba(136,136,187,0.55)";
+  ctx.textAlign = "center";
+  ctx.fillText("ESC · BACK BUTTON → RETURN", logW / 2, logH - 18);
+
+  _applyDotOverlay();
+}
+
+/* ─────────────────────────────────────────────────────────────
+   설정 화면 배경 렌더 (슬라이더는 HTML 오버레이)
+───────────────────────────────────────────────────────────── */
+export function renderSettingsBackground() {
+  if (!ctx) return;
+  _frame++;
+
+  ctx.fillStyle = PAL.bg;
+  ctx.fillRect(0, 0, logW, logH);
+
+  ctx.fillStyle = "rgba(112,112,255,0.04)";
+  for (let y = 0; y < logH; y += 4) ctx.fillRect(0, y, logW, 2);
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 20px monospace";
+  ctx.fillStyle = "#7070ff";
+  ctx.shadowColor = "rgba(112,112,255,0.7)";
+  ctx.shadowBlur = 10;
+  ctx.fillText("SETTINGS", logW / 2, 44);
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+
+  ctx.strokeStyle = "rgba(112,112,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(24, 64);
+  ctx.lineTo(logW - 24, 64);
+  ctx.stroke();
+
+  _applyDotOverlay();
+}
 function _drawSwapTile(colorKey, px, py) {
   if (colorKey && TILE_COLORS[colorKey]) {
     const tc = TILE_COLORS[colorKey];
@@ -294,7 +510,7 @@ function _applyDotOverlay() {
 /* ─────────────────────────────────────────────────────────────
    3. 입력 어댑터 (click + touch)
 ───────────────────────────────────────────────────────────── */
-function _attachInputAdapter(onCellSelect) {
+function _attachInputAdapter(onCellSelect, onTitleMenuSelect) {
   if (!canvas) return;
 
   function _coordToCell(clientX, clientY) {
@@ -307,10 +523,24 @@ function _attachInputAdapter(onCellSelect) {
     return [row, col];
   }
 
+  function _coordToTitleMenu(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const y = (clientY - rect.top) * (canvas.height / rect.height);
+    for (let i = 0; i < TITLE_MENU_Y.length; i++) {
+      if (Math.abs(y - TITLE_MENU_Y[i]) <= TITLE_MENU_ITEM_H / 2) return i;
+    }
+    return -1;
+  }
+
   canvas.addEventListener("click", function (ev) {
-    const cell = _coordToCell(ev.clientX, ev.clientY);
-    if (cell && typeof onCellSelect === "function") {
-      onCellSelect(cell[0], cell[1]);
+    if (state.screen === "title") {
+      const idx = _coordToTitleMenu(ev.clientX, ev.clientY);
+      if (idx >= 0 && typeof onTitleMenuSelect === "function")
+        onTitleMenuSelect(idx);
+    } else if (state.screen === "game") {
+      const cell = _coordToCell(ev.clientX, ev.clientY);
+      if (cell && typeof onCellSelect === "function")
+        onCellSelect(cell[0], cell[1]);
     }
   });
 
@@ -319,9 +549,14 @@ function _attachInputAdapter(onCellSelect) {
     function (ev) {
       ev.preventDefault();
       const t = ev.changedTouches[0];
-      const cell = _coordToCell(t.clientX, t.clientY);
-      if (cell && typeof onCellSelect === "function") {
-        onCellSelect(cell[0], cell[1]);
+      if (state.screen === "title") {
+        const idx = _coordToTitleMenu(t.clientX, t.clientY);
+        if (idx >= 0 && typeof onTitleMenuSelect === "function")
+          onTitleMenuSelect(idx);
+      } else if (state.screen === "game") {
+        const cell = _coordToCell(t.clientX, t.clientY);
+        if (cell && typeof onCellSelect === "function")
+          onCellSelect(cell[0], cell[1]);
       }
     },
     { passive: false },
