@@ -7,8 +7,9 @@ import {
   H,
   REMOVAL_INTERVAL,
   REMOVAL_FRAMES,
-  LEVEL_THRESHOLDS,
-  LEVEL_INTERVALS,
+  BASE_RISE_INTERVAL,
+  POINTS_PER_LEVEL,
+  INTERVAL_STEP,
   MIN_INTERVAL,
   getActiveColors,
 } from "./constants.js";
@@ -25,28 +26,24 @@ export function setStartRiseCb(fn) {
    레벨 / 점수 유틸
 ───────────────────────────────────────────────────────────── */
 export function scoreToLevel(s) {
-  for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
-    if (s < LEVEL_THRESHOLDS[i]) return i;
-  }
-  const base = LEVEL_THRESHOLDS[LEVEL_THRESHOLDS.length - 1];
-  return LEVEL_THRESHOLDS.length + Math.floor((s - base) / 150);
+  return Math.floor(s / POINTS_PER_LEVEL);
 }
 
 export function levelToInterval(lv) {
-  if (lv < LEVEL_INTERVALS.length) return LEVEL_INTERVALS[lv];
-  return Math.max(
-    MIN_INTERVAL,
-    LEVEL_INTERVALS[LEVEL_INTERVALS.length - 1] -
-      (lv - LEVEL_INTERVALS.length + 1) * 30,
-  );
+  return Math.max(MIN_INTERVAL, BASE_RISE_INTERVAL - lv * INTERVAL_STEP);
 }
 
 function updateLevelAndRise() {
   const newLevel = scoreToLevel(state.score);
   if (newLevel !== state.level) {
     state.level = newLevel;
-    state.riseInterval = levelToInterval(state.level);
-    if (state.riseTimer) _startRiseCb();
+    const newInterval = levelToInterval(state.level);
+    // riseInterval이 실제로 바뀐 경우에만 타이머를 재시작
+    // (MIN 도달 후 레벨 번호만 올라갈 때 타이머가 리셋되어
+    //  상승이 오히려 느려지는 버그 방지)
+    const intervalChanged = newInterval !== state.riseInterval;
+    state.riseInterval = newInterval;
+    if (state.riseTimer && intervalChanged) _startRiseCb();
   }
 }
 

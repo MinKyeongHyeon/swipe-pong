@@ -51,9 +51,9 @@ const TILE_COLORS = {
     shadow: "rgba(60,0,100,0.55)",
   },
   K: {
-    base: "#FF2D78",
-    shine: "rgba(255,160,200,0.45)",
-    shadow: "rgba(100,0,40,0.55)",
+    base: "#00E0E0",
+    shine: "rgba(140,255,255,0.45)",
+    shadow: "rgba(0,60,60,0.55)",
   },
 };
 

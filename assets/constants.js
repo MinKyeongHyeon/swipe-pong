@@ -7,12 +7,12 @@ export const H = 12;
 export const COLORS = ["R", "G", "B", "Y", "P", "K"];
 
 // 레벨별 활성 색상 — 레벨이 오를수록 색 점진 추가
-// Level  0-3 : 4색 (R G B Y)
-// Level  4-7 : 5색 (+ P 보라)
-// Level  8+  : 6색 (+ K 핑크)
+// Level  0-11 : 4색 (R G B Y)
+// Level 12-23 : 5색 (+ P 보라)
+// Level 24+   : 6색 (+ K 시안)
 export function getActiveColors(level) {
-  if (level >= 8) return COLORS;
-  if (level >= 4) return COLORS.slice(0, 5);
+  if (level >= 24) return COLORS;
+  if (level >= 12) return COLORS.slice(0, 5);
   return COLORS.slice(0, 4);
 }
 
@@ -28,20 +28,15 @@ export const REMOVAL_FRAMES = 4; // 0..3, 마지막 프레임 뒤에 제거
 export const GLOBAL_SFX_DB = -6;
 export const GLOBAL_SFX_GAIN = Math.pow(10, GLOBAL_SFX_DB / 20); // ~0.501
 
-// 레벨별 누적 점수 임계값 — 간격이 점점 좁아지는 비선형 구조
-export const LEVEL_THRESHOLDS = (function () {
-  const gaps = [1000, 800, 600, 500];
-  const t = [];
-  let acc = 0;
-  for (let i = 0; i < gaps.length; i++) {
-    acc += gaps[i];
-    t.push(acc);
-  }
-  return t; // 이후 레벨은 150pt 간격으로 무한 확장
-})();
-
-// 레벨별 rise 인터벌(ms) — 초반 급감, 후반 완만
-export const LEVEL_INTERVALS = [
-  3500, 3000, 2550, 2150, 1800, 1500, 1250, 1000, 750, 500,
-];
+// ── 테트리스식 레벨 디자인 ─────────────────────────────────
+// Level = floor(score / POINTS_PER_LEVEL)  → 단순 나눗셈
+// Interval = BASE_RISE_INTERVAL - level * INTERVAL_STEP  → 단순 선형
+//
+// Level  0 : 3500ms   Level 20 : 2000ms
+// Level  5 : 3125ms   Level 30 : 1250ms
+// Level 10 : 2750ms   Level 40 :  500ms (MIN)
+// Level 12 : 2600ms   → 5색 추가 (score 4800)
+// Level 24 : 1700ms   → 6색 추가 (score 9600)
+export const POINTS_PER_LEVEL = 400; // 레벨업에 필요한 점수
+export const INTERVAL_STEP = 75; // 레벨당 인터벌 감소량(ms), 레벨 40에서 MIN 도달
 export const MIN_INTERVAL = 500;
